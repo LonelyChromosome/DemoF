@@ -21,7 +21,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply patch
+      - name: Apply atomic patch v2.0.5
         run: python3 tool/apply_atomic_widget_v205.py
 
       - name: Java 17
