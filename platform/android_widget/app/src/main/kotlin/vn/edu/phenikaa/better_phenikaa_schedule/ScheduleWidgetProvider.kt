@@ -54,6 +54,74 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         }
     }
 
+    fun stageThemeTransition(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        widgetIds: IntArray,
+        oldThemeKey: String,
+        targetThemeKey: String,
+    ) {
+        val state = context.getSharedPreferences(WIDGET_RENDER_STATE_PREFS, Context.MODE_PRIVATE)
+        widgetIds.forEach { widgetId ->
+            val options = appWidgetManager.getAppWidgetOptions(widgetId)
+            val size = legacyWidgetSize(options)
+            val widthDp = size.width.roundToInt().coerceAtLeast(1)
+            val heightDp = size.height.roundToInt().coerceAtLeast(1)
+            val cover = renderWidgetTransitionFrame(
+                context = context,
+                widgetId = widgetId,
+                renderWidthDp = widthDp,
+                renderHeightDp = heightDp,
+                progress = 0f,
+                fromThemeKey = oldThemeKey,
+                toThemeKey = targetThemeKey,
+            ) ?: renderWidgetRefreshCover(
+                context,
+                widgetId,
+                widthDp,
+                heightDp,
+                oldThemeKey,
+            )
+            val oldTheme = themeColorsForKey(oldThemeKey)
+            val freeze = RemoteViews(context.packageName, R.layout.schedule_widget)
+            freeze.setImageViewBitmap(
+                R.id.widget_theme_background,
+                renderThemeBackground(context, widthDp, heightDp, oldTheme),
+            )
+            freeze.setInt(R.id.widget_calendar, "setColorFilter", oldTheme.iconColor)
+            if (cover != null) {
+                freeze.setImageViewBitmap(R.id.widget_refresh_cover, cover)
+                freeze.setViewVisibility(R.id.widget_refresh_cover, View.VISIBLE)
+                freeze.setViewVisibility(R.id.widget_list, View.INVISIBLE)
+            }
+            appWidgetManager.partiallyUpdateAppWidget(widgetId, freeze)
+            state.edit()
+                .putString(transitionFromKey(widgetId), oldThemeKey)
+                .putString(transitionTargetKey(widgetId), targetThemeKey)
+                .apply()
+        }
+    }
+
+    fun refreshHiddenCollection(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        widgetIds: IntArray,
+        oldThemeKey: String,
+        targetThemeKey: String,
+    ) {
+        val state = context.getSharedPreferences(WIDGET_RENDER_STATE_PREFS, Context.MODE_PRIVATE)
+        widgetIds.forEach { widgetId ->
+            val expected = state.getString(transitionTargetKey(widgetId), null)
+            if (expected != targetThemeKey) return@forEach
+            state.edit()
+                .putString(themeTokenKey(widgetId), targetThemeKey)
+                .putString(transitionFromKey(widgetId), oldThemeKey)
+                .apply()
+            // StackView remains INVISIBLE behind the frozen old-theme bitmap.
+            appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
+        }
+    }
+
     override fun onAppWidgetOptionsChanged(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -296,6 +364,12 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             return
         }
         val manager = AppWidgetManager.getInstance(context)
+        val state = context.getSharedPreferences(WIDGET_RENDER_STATE_PREFS, Context.MODE_PRIVATE)
+        val targetThemeKey = state.getString(transitionTargetKey(widgetId), null) ?: readyThemeKey
+        if (targetThemeKey != readyThemeKey) {
+            return
+        }
+        val fromThemeKey = state.getString(transitionFromKey(widgetId), null) ?: readyThemeKey
         val options = manager.getAppWidgetOptions(widgetId)
         val size = legacyWidgetSize(options)
         val widthDp = size.width.roundToInt().coerceAtLeast(1)
@@ -309,6 +383,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 context = context,
                 widgetId = widgetId,
                 readyThemeKey = readyThemeKey,
+                fromThemeKey = fromThemeKey,
                 widthDp = widthDp,
                 heightDp = heightDp,
                 frame = 0,
@@ -320,6 +395,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         context: Context,
         widgetId: Int,
         readyThemeKey: String,
+        fromThemeKey: String,
         widthDp: Int,
         heightDp: Int,
         frame: Int,
@@ -329,12 +405,26 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         }
         val denominator = (TRANSITION_FRAME_COUNT - 1).coerceAtLeast(1)
         val progress = frame.toFloat() / denominator.toFloat()
+        if (frame == 0) {
+            val targetTheme = themeColorsForKey(readyThemeKey)
+            val prep = RemoteViews(context.packageName, R.layout.schedule_widget)
+            prep.setImageViewBitmap(
+                R.id.widget_theme_background,
+                renderThemeBackground(context, widthDp, heightDp, targetTheme),
+            )
+            prep.setInt(R.id.widget_calendar, "setColorFilter", targetTheme.iconColor)
+            prep.setViewVisibility(R.id.widget_list, View.INVISIBLE)
+            prep.setViewVisibility(R.id.widget_refresh_cover, View.VISIBLE)
+            AppWidgetManager.getInstance(context).partiallyUpdateAppWidget(widgetId, prep)
+        }
         val bitmap = renderWidgetTransitionFrame(
             context,
             widgetId,
             widthDp,
             heightDp,
             progress,
+            fromThemeKey,
+            readyThemeKey,
         )
         if (bitmap == null) {
             finishRevealTransition(context, widgetId, readyThemeKey)
@@ -354,6 +444,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                     context = context,
                     widgetId = widgetId,
                     readyThemeKey = readyThemeKey,
+                    fromThemeKey = fromThemeKey,
                     widthDp = widthDp,
                     heightDp = heightDp,
                     frame = frame + 1,
@@ -379,6 +470,11 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         reveal.setViewVisibility(R.id.widget_refresh_cover, View.GONE)
         AppWidgetManager.getInstance(context)
             .partiallyUpdateAppWidget(widgetId, reveal)
+        context.getSharedPreferences(WIDGET_RENDER_STATE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove(transitionFromKey(widgetId))
+            .remove(transitionTargetKey(widgetId))
+            .apply()
     }
 
     private data class ThemeColors(
@@ -394,7 +490,10 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             .getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
             .getString("flutter.appTheme", "classic")
             ?: "classic"
-        return when (key) {
+        return themeColorsForKey(key)
+    }
+
+    private fun themeColorsForKey(key: String): ThemeColors = when (key) {
             "lol" -> ThemeColors(key, 0xFF06131A.toInt(), 0xFF0B343A.toInt(), 0xFFF0E6D2.toInt(), 0xFFF0E6D2.toInt())
             "valorant" -> ThemeColors(key, 0xFF0F1923.toInt(), 0xFF24313B.toInt(), 0xFFECE8E1.toInt(), 0xFFECE8E1.toInt())
             "minecraft" -> ThemeColors(key, 0xFF3A2B20.toInt(), 0xFF6B4A2F.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
@@ -406,7 +505,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             "steam" -> ThemeColors(key, 0xFF171D25.toInt(), 0xFF1B3D55.toInt(), 0xFFD6E9F8.toInt(), 0xFFD6E9F8.toInt())
             else -> ThemeColors("classic", 0xFF173A8E.toInt(), 0xFF315AB5.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
         }
-    }
 
     private fun renderThemeBackground(
         context: Context,
@@ -510,6 +608,9 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
 
         fun selectedDateKey(widgetId: Int): String = "selected_date_$widgetId"
         fun resetChildKey(widgetId: Int): String = "reset_child_$widgetId"
+
+        private fun transitionFromKey(widgetId: Int) = "transition_from_$widgetId"
+        private fun transitionTargetKey(widgetId: Int) = "transition_target_$widgetId"
 
         private const val DATE_PICKER_REQUEST_CODE_BASE = 100_000
         private const val MAX_EXACT_LAYOUTS = 16

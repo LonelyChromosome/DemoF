@@ -155,6 +155,7 @@ private fun renderWidgetSlide(
     item: WidgetClass,
     renderWidthDp: Int,
     renderHeightDp: Int,
+    themeOverrideKey: String? = null,
 ): Bitmap {
         val density = context.resources.displayMetrics.density
         val widthDp = renderWidthDp.coerceAtLeast(1)
@@ -165,7 +166,7 @@ private fun renderWidgetSlide(
         val canvas = Canvas(horizontal)
         val widthPx = width.toFloat()
         val heightPx = height.toFloat()
-        val theme = readWidgetTheme(context)
+        val theme = themeOverrideKey?.let(::widgetThemeForKey) ?: readWidgetTheme(context)
 
         // StackView keeps neighbouring children alive. Every child must be opaque;
         // transparent text-only children can all become visible together after a
@@ -268,9 +269,16 @@ internal fun renderWidgetRefreshCover(
     widgetId: Int,
     renderWidthDp: Int,
     renderHeightDp: Int,
+    themeOverrideKey: String? = null,
 ): Bitmap? {
     val first = readWidgetClasses(context, widgetId).firstOrNull() ?: return null
-    return renderWidgetSlide(context, first, renderWidthDp, renderHeightDp)
+    return renderWidgetSlide(
+        context,
+        first,
+        renderWidthDp,
+        renderHeightDp,
+        themeOverrideKey,
+    )
 }
 
 internal fun renderWidgetTransitionFrame(
@@ -279,9 +287,14 @@ internal fun renderWidgetTransitionFrame(
     renderWidthDp: Int,
     renderHeightDp: Int,
     progress: Float,
+    fromThemeKey: String? = null,
+    toThemeKey: String? = null,
 ): Bitmap? {
     val first = readWidgetClasses(context, widgetId).firstOrNull() ?: return null
-    val sharp = renderWidgetSlide(context, first, renderWidthDp, renderHeightDp)
+    val fromKey = fromThemeKey ?: readWidgetTheme(context).key
+    val toKey = toThemeKey ?: readWidgetTheme(context).key
+    val oldSharp = renderWidgetSlide(context, first, renderWidthDp, renderHeightDp, fromKey)
+    val sharp = renderWidgetSlide(context, first, renderWidthDp, renderHeightDp, toKey)
     val output = Bitmap.createBitmap(sharp.width, sharp.height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(output)
     val p = progress.coerceIn(0f, 1f)
@@ -305,14 +318,14 @@ internal fun renderWidgetTransitionFrame(
         0.7f to 0.7f,
     )
     for ((dx, dy) in taps) {
-        canvas.drawBitmap(sharp, dx * softOffset, dy * softOffset, frostPaint)
+        canvas.drawBitmap(oldSharp, dx * softOffset, dy * softOffset, frostPaint)
     }
     val frostCenterPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
         alpha = 76
     }
-    canvas.drawBitmap(sharp, 0f, 0f, frostCenterPaint)
+    canvas.drawBitmap(oldSharp, 0f, 0f, frostCenterPaint)
 
-    val theme = readWidgetTheme(context)
+    val theme = widgetThemeForKey(toKey)
     val veilAlpha = ((1f - p) * 92f).toInt().coerceIn(0, 92)
     if (veilAlpha > 0) {
         val veilColor = (theme.startColor and 0x00FFFFFF) or (veilAlpha shl 24)
@@ -364,7 +377,10 @@ private fun readWidgetTheme(context: Context): WidgetTheme {
         .getSharedPreferences(SNAPSHOT_PREFS, Context.MODE_PRIVATE)
         .getString(THEME_KEY, "classic")
         ?: "classic"
-    return when (key) {
+    return widgetThemeForKey(key)
+}
+
+private fun widgetThemeForKey(key: String): WidgetTheme = when (key) {
         "lol" -> WidgetTheme(key, 0xFF06131A.toInt(), 0xFF0B343A.toInt(), 0xFFF0E6D2.toInt(), 0xFFC8AA6E.toInt())
         "valorant" -> WidgetTheme(key, 0xFF0F1923.toInt(), 0xFF24313B.toInt(), 0xFFECE8E1.toInt(), 0xFFFF7B86.toInt())
         "minecraft" -> WidgetTheme(key, 0xFF3A2B20.toInt(), 0xFF6B4A2F.toInt(), 0xFFFFFFFF.toInt(), 0xFFD8D1C9.toInt())
@@ -376,7 +392,6 @@ private fun readWidgetTheme(context: Context): WidgetTheme {
         "steam" -> WidgetTheme(key, 0xFF171D25.toInt(), 0xFF1B3D55.toInt(), 0xFFD6E9F8.toInt(), 0xFF66C0F4.toInt())
         else -> WidgetTheme("classic", 0xFF173A8E.toInt(), 0xFF315AB5.toInt(), 0xFFFFFFFF.toInt(), 0xFFDDE8FF.toInt())
     }
-}
 
 private fun themedTypeface(context: Context, theme: WidgetTheme, style: Int): Typeface {
     if (theme.key != "minecraft") {

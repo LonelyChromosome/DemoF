@@ -359,9 +359,20 @@ class AppThemeController extends ChangeNotifier {
         }
       }
     }
-    await prefs.setString(_widgetPreferenceKey, _theme.storageKey);
+    if (!prefs.containsKey(_widgetPreferenceKey)) {
+      await prefs.setString(_widgetPreferenceKey, _theme.storageKey);
+    }
     notifyListeners();
-    await _syncWidgetTheme();
+    final widgetTheme = prefs.getString(_widgetPreferenceKey);
+    if (widgetTheme != _theme.storageKey) {
+      final nativeApplied = await _applyWidgetThemeImmediately(
+        _theme.storageKey,
+      );
+      if (!nativeApplied) {
+        await prefs.setString(_widgetPreferenceKey, _theme.storageKey);
+        await _syncWidgetTheme();
+      }
+    }
   }
 
   Future<void> select(AppThemeId value) async {
@@ -373,12 +384,10 @@ class AppThemeController extends ChangeNotifier {
     // theme-only path is a partial RemoteViews update and never rebinds StackView.
     final nativeUpdate = _applyWidgetThemeImmediately(value.storageKey);
     final prefs = await SharedPreferences.getInstance();
-    await Future.wait<bool>(<Future<bool>>[
-      prefs.setString(_preferenceKey, value.storageKey),
-      prefs.setString(_widgetPreferenceKey, value.storageKey),
-    ]);
+    await prefs.setString(_preferenceKey, value.storageKey);
     final nativeApplied = await nativeUpdate;
     if (!nativeApplied) {
+      await prefs.setString(_widgetPreferenceKey, value.storageKey);
       await _syncWidgetTheme();
     }
   }
