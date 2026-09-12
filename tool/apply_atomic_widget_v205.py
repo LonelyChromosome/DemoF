@@ -1,7 +1,6 @@
 from pathlib import Path
 import re
 
-# Flutter: notify native widget immediately at the exact theme tap.
 p = Path('lib/theme/app_theme.dart')
 s = p.read_text(encoding='utf-8')
 if "package:flutter/services.dart" not in s:
@@ -43,8 +42,8 @@ new_select = """  Future<void> select(AppThemeId value) async {
     _theme = value;
     notifyListeners();
 
-    // Start native rendering at the exact tap. The launcher gets the update while
-    // the user is still inside the picker instead of waiting for a plugin round-trip.
+    // Dispatch the native widget update at the exact theme tap. The widget's
+    // theme-only path is a partial RemoteViews update and never rebinds StackView.
     final nativeUpdate = _applyWidgetThemeImmediately(value.storageKey);
     final prefs = await SharedPreferences.getInstance();
     await Future.wait<bool>(<Future<bool>>[
@@ -79,8 +78,6 @@ if old_select not in s:
 s = s.replace(old_select, new_select, 1)
 p.write_text(s, encoding='utf-8')
 
-# Native bridge: synchronously write the widget preference and dispatch the widget
-# update before returning to Flutter.
 main = Path('platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/MainActivity.kt')
 main.parent.mkdir(parents=True, exist_ok=True)
 main.write_text('''package vn.edu.phenikaa.better_phenikaa_schedule
@@ -106,6 +103,8 @@ class MainActivity : FlutterActivity() {
 
             val theme = call.argument<String>("theme") ?: "classic"
             val prefs = getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)
+            // Synchronous write guarantees ScheduleWidgetProvider reads this same
+            // theme in the immediately-following update call.
             prefs.edit().putString(THEME_KEY, theme).commit()
 
             val manager = AppWidgetManager.getInstance(this)
@@ -126,12 +125,10 @@ class MainActivity : FlutterActivity() {
 }
 ''', encoding='utf-8')
 
-# StackView items become transparent: there is now exactly one owner of the large
-# theme color surface (widget_theme_background in the provider).
+# The current collection renderer is already transparent/theme-independent. Keep
+# that architecture; only older revisions need their per-item theme background removed.
 service = Path('platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetService.kt')
 t = service.read_text(encoding='utf-8')
-t = t.replace('import android.graphics.LinearGradient\n', '')
-t = t.replace('import android.graphics.Shader\n', '')
 background = """        val theme = readWidgetTheme(context)
         val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             shader = LinearGradient(
@@ -147,13 +144,16 @@ background = """        val theme = readWidgetTheme(context)
         canvas.drawRect(0f, 0f, widthPx, heightPx, backgroundPaint)
 
 """
-if background not in t:
-    raise SystemExit('widget item background marker missing')
-t = t.replace(background, '        val theme = readWidgetTheme(context)\n\n', 1)
+if background in t:
+    t = t.replace('import android.graphics.LinearGradient\n', '')
+    t = t.replace('import android.graphics.Shader\n', '')
+    t = t.replace(background, '        val theme = readWidgetTheme(context)\n\n', 1)
+elif 'Theme-independent transparent collection layer' not in t:
+    raise SystemExit('transparent widget collection marker missing')
 service.write_text(t, encoding='utf-8')
 
-# Hide the legacy colored peek mask; it can otherwise preserve one stale theme
-# rectangle while Samsung Launcher is updating collection children.
+# The small colored peek mask can still preserve a stale theme rectangle for one
+# host frame. Hide it entirely; transparent collection children make it unnecessary.
 layout = Path('platform/android_widget/app/src/main/res/layout/schedule_widget.xml')
 x = layout.read_text(encoding='utf-8')
 marker = '        android:id="@+id/widget_stack_peek_mask"\n'
@@ -164,7 +164,6 @@ if 'android:visibility="gone"' not in segment:
     x = x.replace(marker, marker + '        android:visibility="gone"\n', 1)
 layout.write_text(x, encoding='utf-8')
 
-# Stop manipulating the hidden mask in RemoteViews.
 provider = Path('platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt')
 q = provider.read_text(encoding='utf-8')
 q = re.sub(
@@ -183,5 +182,4 @@ u = pub.read_text(encoding='utf-8')
 u = re.sub(r'^version:.*$', 'version: 2.0.5+10', u, count=1, flags=re.M)
 pub.write_text(u, encoding='utf-8')
 
-# Remove this one-shot patch from the final source tree.
 Path(__file__).unlink(missing_ok=True)
