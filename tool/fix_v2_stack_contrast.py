@@ -8,7 +8,6 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-# --- Flutter control-panel contrast -----------------------------------------
 app_path = Path("lib/app/app.dart")
 a = app_path.read_text(encoding="utf-8")
 a = replace_once(
@@ -47,13 +46,12 @@ if helpers not in a:
 app_path.write_text(a, encoding="utf-8")
 
 
-# --- Native StackView: each item must be opaque -----------------------------
 service_path = Path(
     "platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetService.kt"
 )
 s = service_path.read_text(encoding="utf-8")
 canvas_marker = """        val canvas = Canvas(horizontal)\n        val widthPx = width.toFloat()\n        val heightPx = height.toFloat()\n\n        // Every coordinate is proportional to the real frame supplied by the host."""
-canvas_replacement = """        val canvas = Canvas(horizontal)\n        val widthPx = width.toFloat()\n        val heightPx = height.toFloat()\n        val theme = readWidgetTheme(context)\n\n        // StackView intentionally keeps neighbouring children alive. Each child must\n        // therefore be fully opaque; a transparent text-only child lets Samsung\n        // Launcher expose several subjects at once during refresh/restore.\n        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {\n            shader = LinearGradient(\n                0f,\n                0f,\n                widthPx,\n                0f,\n                theme.startColor,\n                theme.endColor,\n                Shader.TileMode.CLAMP,\n            )\n        }\n        canvas.drawRect(0f, 0f, widthPx, heightPx, backgroundPaint)\n\n        // Every coordinate is proportional to the real frame supplied by the host."""
+canvas_replacement = """        val canvas = Canvas(horizontal)\n        val widthPx = width.toFloat()\n        val heightPx = height.toFloat()\n        val theme = readWidgetTheme(context)\n\n        // StackView keeps neighbouring children alive. Every child must be opaque;\n        // transparent text-only children can all become visible together after a\n        // Samsung Launcher refresh/restore and create the overlapping-text defect.\n        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {\n            shader = LinearGradient(\n                0f,\n                0f,\n                widthPx,\n                0f,\n                theme.startColor,\n                theme.endColor,\n                Shader.TileMode.CLAMP,\n            )\n        }\n        canvas.drawRect(0f, 0f, widthPx, heightPx, backgroundPaint)\n\n        // Every coordinate is proportional to the real frame supplied by the host."""
 s = replace_once(s, canvas_marker, canvas_replacement, "opaque item background")
 s = replace_once(
     s,
@@ -70,7 +68,6 @@ s = replace_once(
 service_path.write_text(s, encoding="utf-8")
 
 
-# --- Provider: stable adapter, in-place theme refresh -----------------------
 provider_path = Path(
     "platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt"
 )
@@ -84,7 +81,7 @@ p = replace_once(
 p = replace_once(
     p,
     """        if (collectionChanged) {\n            appWidgetManager.updateAppWidget(widgetId, views)\n            appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)\n            renderStatePrefs.edit().putString(contentTokenKey(widgetId), contentToken).apply()\n        } else {\n            // Theme-only path: update background/calendar chrome without touching\n            // StackView or its adapter. No old/new collection frames can overlap.\n            appWidgetManager.partiallyUpdateAppWidget(widgetId, views)\n        }\n""",
-    """        if (collectionChanged) {\n            appWidgetManager.updateAppWidget(widgetId, views)\n            appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)\n            renderStatePrefs.edit()\n                .putString(contentTokenKey(widgetId), contentToken)\n                .putString(themeTokenKey(widgetId), themeKey)\n                .apply()\n        } else if (themeChanged) {\n            // Keep the RemoteViews adapter identity untouched. Only repaint the\n            // existing children; each one is opaque, so no neighbour can bleed\n            // through while Samsung Launcher swaps the refreshed views.\n            appWidgetManager.partiallyUpdateAppWidget(widgetId, views)\n            appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)\n            renderStatePrefs.edit().putString(themeTokenKey(widgetId), themeKey).apply()\n        } else {\n            appWidgetManager.partiallyUpdateAppWidget(widgetId, views)\n        }\n""",
+    """        if (collectionChanged) {\n            appWidgetManager.updateAppWidget(widgetId, views)\n            appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)\n            renderStatePrefs.edit()\n                .putString(contentTokenKey(widgetId), contentToken)\n                .putString(themeTokenKey(widgetId), themeKey)\n                .apply()\n        } else if (themeChanged) {\n            // Keep the adapter identity stable. Repaint its existing children in place;\n            // their opaque backgrounds prevent any neighbouring item from showing\n            // through during the refresh.\n            appWidgetManager.partiallyUpdateAppWidget(widgetId, views)\n            appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)\n            renderStatePrefs.edit().putString(themeTokenKey(widgetId), themeKey).apply()\n        } else {\n            appWidgetManager.partiallyUpdateAppWidget(widgetId, views)\n        }\n""",
     "stable theme refresh path",
 )
 p = replace_once(
@@ -96,6 +93,9 @@ p = replace_once(
 provider_path.write_text(p, encoding="utf-8")
 
 
-# Release bump.
 pubspec_path = Path("pubspec.yaml")
-ps = pubspec_path.read_text(encoding="utf-8")n
+ps = pubspec_path.read_text(encoding="utf-8")
+ps2 = re.sub(r"^version:\s*2\.0\.\d+\+\d+\s*$", "version: 2.0.6+11", ps, count=1, flags=re.M)
+if ps2 == ps:
+    raise RuntimeError("version marker missing")
+pubspec_path.write_text(ps2, encoding="utf-8")
