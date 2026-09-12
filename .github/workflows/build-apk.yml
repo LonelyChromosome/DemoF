@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - feature/widget-theme-2.1.0
 
 permissions:
   contents: read
