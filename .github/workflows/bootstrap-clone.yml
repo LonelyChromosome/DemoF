@@ -1,13 +1,14 @@
-name: Bootstrap DemoF from demoD
+name: Finish DemoF mirror
 
 on:
   push:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
-  clone_base:
+  mirror_workflows:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout DemoF
@@ -15,34 +16,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Guard bootstrap commit
-        id: guard
-        shell: bash
-        run: |
-          if [ "$(git log -1 --pretty=%s)" = "chore: clone Better Phenikaa 1.0 as 2.0 base" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Clone current Better Phenikaa 1.0 source
-        if: steps.guard.outputs.skip != 'true'
+      - name: Clone source workflows
         shell: bash
         run: |
           git clone --depth 1 --branch feature/full-app-implementation https://github.com/LonelyChromosome/demoD.git /tmp/demoD
+          rsync -a --delete /tmp/demoD/.github/workflows/ .github/workflows/
 
-      - name: Mirror source tree into DemoF
-        if: steps.guard.outputs.skip != 'true'
-        shell: bash
-        run: |
-          rsync -a --delete --exclude='.git/' --exclude='.github/workflows/' /tmp/demoD/ ./
-
-      - name: Commit 2.0 base
-        if: steps.guard.outputs.skip != 'true'
+      - name: Commit exact workflow mirror
         shell: bash
         run: |
           git config user.name "cooc"
           git config user.email "minhdaonguyenad@gmail.com"
-          git add -A
-          git commit -m "chore: clone Better Phenikaa 1.0 as 2.0 base"
+          git add .github/workflows
+          git commit -m "chore: mirror Better Phenikaa 1.0 workflows"
           git push origin HEAD:main
