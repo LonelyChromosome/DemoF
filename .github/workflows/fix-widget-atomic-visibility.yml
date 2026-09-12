@@ -150,3 +150,5 @@ jobs:
           git add platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt pubspec.yaml
           git commit -m 'fix: hide live stack during atomic widget refresh'
           git push origin HEAD:main
+
+# trigger-2
