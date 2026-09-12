@@ -334,6 +334,7 @@ class AppThemeController extends ChangeNotifier {
 
   static final AppThemeController instance = AppThemeController._();
   static const _preferenceKey = 'better_phenikaa_theme_v2';
+  static const _widgetPreferenceKey = 'appTheme';
 
   AppThemeId _theme = AppThemeId.classic;
   bool _loaded = false;
@@ -354,6 +355,7 @@ class AppThemeController extends ChangeNotifier {
         }
       }
     }
+    await prefs.setString(_widgetPreferenceKey, _theme.storageKey);
     notifyListeners();
     await _syncWidgetTheme();
   }
@@ -364,6 +366,7 @@ class AppThemeController extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_preferenceKey, value.storageKey);
+    await prefs.setString(_widgetPreferenceKey, value.storageKey);
     await _syncWidgetTheme();
   }
 
