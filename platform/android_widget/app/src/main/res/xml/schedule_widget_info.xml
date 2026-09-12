@@ -7,6 +7,7 @@
     android:minResizeWidth="220dp"
     android:previewLayout="@layout/schedule_widget"
     android:resizeMode="horizontal"
+    android:targetCellWidth="6"
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />
