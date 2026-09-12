@@ -2,36 +2,42 @@ import 'dart:async';
 
 import 'package:better_phenikaa_schedule/features/qldt_intake/qldt_login.dart';
 import 'package:better_phenikaa_schedule/features/qldt_intake/qldt_models.dart';
+import 'package:better_phenikaa_schedule/theme/app_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class BetterPhenikaaScheduleApp extends StatelessWidget {
+class BetterPhenikaaScheduleApp extends StatefulWidget {
   const new({super.key});
 
   @override
+  State<BetterPhenikaaScheduleApp> createState() =>
+      _BetterPhenikaaScheduleAppState();
+}
+
+class _BetterPhenikaaScheduleAppState extends State<BetterPhenikaaScheduleApp> {
+  final AppThemeController _themes = AppThemeController.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_themes.load());
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const primary = Color(0xFF12358B);
-    return MaterialApp(
-      title: 'Better Phenikaa App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF7F9FD),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: primary,
-          primary: primary,
-          surface: Colors.white,
-        ),
-        fontFamily: 'Roboto',
-        cardTheme: const CardThemeData(
-          color: Colors.white,
-          elevation: 0,
-          margin: EdgeInsets.zero,
-        ),
-      ),
-      home: const _AppRoot(),
+    return AnimatedBuilder(
+      animation: _themes,
+      builder: (context, _) {
+        final palette = _themes.palette;
+        return MaterialApp(
+          title: 'Better Phenikaa App',
+          debugShowCheckedModeBanner: false,
+          theme: buildBetterTheme(palette),
+          home: const _AppRoot(),
+        );
+      },
     );
   }
 }
@@ -206,15 +212,10 @@ class _AppRootState extends State<_AppRoot> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: <Color>[Color(0xFFF9FBFF), Color(0xFFF2F6FF)],
-          ),
-        ),
+      backgroundColor: Colors.transparent,
+      body: AppThemeBackdrop(
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -233,8 +234,14 @@ class _AppRootState extends State<_AppRoot> {
                           )
                         : EdgeInsets.zero,
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(desktop ? 28 : 0),
+                      color: palette.surface.withValues(
+                        alpha: desktop ? .98 : .94,
+                      ),
+                      borderRadius: BorderRadius.circular(
+                        desktop && palette.geometry == AppThemeGeometry.rounded
+                            ? 28
+                            : 0,
+                      ),
                       boxShadow: desktop
                           ? const <BoxShadow>[
                               BoxShadow(
@@ -293,39 +300,45 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _PhoneSurface(
+    final palette = appThemePalette;
+    return _PhoneSurface(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          _AppMark(size: 76),
-          SizedBox(height: 26),
+          const _AppMark(size: 76),
+          const SizedBox(height: 26),
           Text(
-            'Better Phenikaa App',
+            themedHeading('Better Phenikaa App', palette),
             style: TextStyle(
-              color: Color(0xFF102B73),
+              color: palette.textPrimary,
               fontSize: 30,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w900,
+              letterSpacing: themeLetterSpacing(palette),
             ),
           ),
-          SizedBox(height: 7),
+          const SizedBox(height: 7),
           Text(
-            'Lịch học & Lịch thi',
-            style: TextStyle(color: Color(0xFF6F7C9B), fontSize: 15),
+            '2.0 • Lịch học & Lịch thi',
+            style: TextStyle(color: palette.textSecondary, fontSize: 15),
           ),
-          SizedBox(height: 120),
+          const SizedBox(height: 120),
           SizedBox(
             width: 88,
             child: LinearProgressIndicator(
-              minHeight: 4,
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-              backgroundColor: Color(0xFFDCE5F8),
-              color: Color(0xFF1747B5),
+              minHeight: palette.geometry == AppThemeGeometry.pixel ? 6 : 4,
+              borderRadius: BorderRadius.all(
+                Radius.circular(
+                  palette.geometry == AppThemeGeometry.rounded ? 10 : 0,
+                ),
+              ),
+              backgroundColor: palette.cardAlt,
+              color: palette.primary,
             ),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           Text(
             'Đang khởi động...',
-            style: TextStyle(color: Color(0xFF607095), fontSize: 12),
+            style: TextStyle(color: palette.textSecondary, fontSize: 12),
           ),
         ],
       ),
@@ -341,6 +354,7 @@ class _LoginScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return _PhoneSurface(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(32, 58, 32, 30),
@@ -349,20 +363,21 @@ class _LoginScreen extends StatelessWidget {
             const Spacer(),
             const _AppMark(size: 62),
             const SizedBox(height: 22),
-            const Text(
-              'Chào mừng bạn!',
+            Text(
+              themedHeading('Chào mừng bạn!', palette),
               style: TextStyle(
-                color: Color(0xFF102B73),
+                color: palette.textPrimary,
                 fontSize: 28,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w900,
+                letterSpacing: themeLetterSpacing(palette),
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'Kết nối với QLĐT để xem lịch học và lịch thi của bạn',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Color(0xFF67789E),
+                color: palette.textSecondary,
                 height: 1.55,
                 fontSize: 15,
               ),
@@ -373,12 +388,6 @@ class _LoginScreen extends StatelessWidget {
               height: 62,
               child: FilledButton(
                 onPressed: onLogin,
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF143B98),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
@@ -390,7 +399,7 @@ class _LoginScreen extends StatelessWidget {
                           : 'Đăng nhập QLĐT thật\n(Android APK)',
                       style: const TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         height: 1.3,
                       ),
                     ),
@@ -399,25 +408,32 @@ class _LoginScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 22),
-            const Row(
+            Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                Icon(Icons.lock_outline, size: 17, color: Color(0xFF8290AF)),
-                SizedBox(width: 8),
+                Icon(
+                  Icons.lock_outline,
+                  size: 17,
+                  color: palette.textSecondary,
+                ),
+                const SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     'Dữ liệu chỉ lưu cục bộ trên thiết bị của bạn',
-                    style: TextStyle(color: Color(0xFF8290AF), fontSize: 12),
+                    style: TextStyle(
+                      color: palette.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
             ),
             const Spacer(flex: 2),
-            const Text(
-              'Better Phenikaa App',
+            Text(
+              'Better Phenikaa App • ${AppThemeController.instance.theme.label}',
               style: TextStyle(
-                color: Color(0xFF9AA5BD),
-                fontSize: 12,
+                color: palette.textSecondary,
+                fontSize: 11.5,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -463,6 +479,7 @@ class _MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     final child = switch (page) {
       _AppPage.timetable => _TimetableScreen(
         data: data,
@@ -496,17 +513,20 @@ class _MainShell extends StatelessWidget {
               ),
             ),
           if (syncing)
-            const Positioned(
+            Positioned(
               left: 0,
               right: 0,
               top: 0,
-              child: LinearProgressIndicator(minHeight: 3),
+              child: LinearProgressIndicator(
+                minHeight: 3,
+                color: palette.primary,
+              ),
             ),
           if (panelOpen)
             Positioned.fill(
               child: GestureDetector(
                 onTap: onTogglePanel,
-                child: Container(color: const Color(0x770B2259)),
+                child: Container(color: Colors.black.withValues(alpha: .48)),
               ),
             ),
           if (panelOpen)
@@ -525,9 +545,12 @@ class _MainShell extends StatelessWidget {
             child: FloatingActionButton(
               heroTag: 'control-panel',
               onPressed: onTogglePanel,
-              backgroundColor: const Color(0xFF1647B6),
-              foregroundColor: Colors.white,
-              elevation: 8,
+              backgroundColor: palette.primary,
+              foregroundColor: palette.id == AppThemeId.lol
+                  ? const Color(0xFF06171D)
+                  : Colors.white,
+              elevation: palette.geometry == AppThemeGeometry.pixel ? 0 : 8,
+              shape: themeButtonShape(palette),
               child: AnimatedRotation(
                 turns: panelOpen ? .125 : 0,
                 duration: const Duration(milliseconds: 260),
@@ -704,22 +727,25 @@ class _AccountScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     final next = _nextForAccount(data);
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _TopTitle(title: 'Tài khoản', badge: null),
-          const SizedBox(height: 30),
+          const _TopTitle(title: 'Tài khoản', badge: null),
+          const SizedBox(height: 26),
           Row(
             children: <Widget>[
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 38,
-                backgroundColor: Color(0xFF3F76DC),
+                backgroundColor: palette.primary,
                 child: Icon(
                   Icons.person_rounded,
-                  color: Colors.white,
+                  color: palette.id == AppThemeId.lol
+                      ? const Color(0xFF06171D)
+                      : Colors.white,
                   size: 48,
                 ),
               ),
@@ -729,18 +755,21 @@ class _AccountScreen extends StatelessWidget {
                   data.displayName.isEmpty
                       ? 'Người dùng QLĐT'
                       : data.displayName,
-                  style: const TextStyle(
-                    color: Color(0xFF102B73),
+                  style: TextStyle(
+                    color: palette.textPrimary,
                     fontSize: 18,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: themeLetterSpacing(palette),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 24),
           _InfoPanel(data: data),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
+          const AppThemeSettingButton(),
+          const SizedBox(height: 12),
           if (next != null) _WidgetPreview(item: next),
           const Spacer(),
           SizedBox(
@@ -760,10 +789,8 @@ class _AccountScreen extends StatelessWidget {
               onPressed: onLogout,
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFFE55656),
-                side: const BorderSide(color: Color(0xFFFFB7B7)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                side: const BorderSide(color: Color(0xFFFF7777)),
+                shape: themeButtonShape(palette),
               ),
               icon: const Icon(Icons.logout_rounded, size: 19),
               label: const Text(
@@ -779,9 +806,7 @@ class _AccountScreen extends StatelessWidget {
   }
 
   static ScheduleRecord? _nextForAccount(ImportedScheduleData data) {
-    if (data.classes.isEmpty) {
-      return null;
-    }
+    if (data.classes.isEmpty) return null;
     final reference = DateTime.now();
     final items =
         data.classes
@@ -801,14 +826,16 @@ class _TopTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return Row(
       children: <Widget>[
         Text(
-          title,
-          style: const TextStyle(
-            color: Color(0xFF102B73),
+          themedHeading(title, palette),
+          style: TextStyle(
+            color: palette.textPrimary,
             fontSize: 25,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w900,
+            letterSpacing: themeLetterSpacing(palette),
           ),
         ),
         if (badge != null) ...<Widget>[
@@ -816,13 +843,16 @@ class _TopTitle extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
             decoration: BoxDecoration(
-              color: const Color(0xFFE9F0FF),
-              borderRadius: BorderRadius.circular(999),
+              color: palette.cardAlt,
+              borderRadius: BorderRadius.circular(
+                palette.geometry == AppThemeGeometry.rounded ? 999 : 0,
+              ),
+              border: Border.all(color: palette.border),
             ),
             child: Text(
               badge!,
-              style: const TextStyle(
-                color: Color(0xFF1747B5),
+              style: TextStyle(
+                color: palette.primary,
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
               ),
@@ -831,14 +861,15 @@ class _TopTitle extends StatelessWidget {
         ],
         const Spacer(),
         if (onCalendarTap == null)
-          const Icon(Icons.calendar_month_outlined, color: Color(0xFF1747B5))
+          Icon(Icons.calendar_month_outlined, color: palette.primary)
         else
           IconButton.filledTonal(
             tooltip: 'Chọn ngày',
             onPressed: onCalendarTap,
             style: IconButton.styleFrom(
-              foregroundColor: const Color(0xFF1747B5),
-              backgroundColor: const Color(0xFFEEF4FF),
+              foregroundColor: palette.primary,
+              backgroundColor: palette.cardAlt,
+              shape: themeButtonShape(palette),
             ),
             icon: const Icon(Icons.calendar_month_outlined),
           ),
@@ -862,16 +893,19 @@ class _DateNavigator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return Row(
       children: <Widget>[
         IconButton(
           onPressed: onPrevious,
-          icon: const Icon(Icons.chevron_left_rounded),
+          icon: Icon(Icons.chevron_left_rounded, color: palette.textSecondary),
         ),
         Expanded(
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(
+              palette.geometry == AppThemeGeometry.rounded ? 18 : 0,
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
               child: Row(
@@ -882,17 +916,17 @@ class _DateNavigator extends StatelessWidget {
                       _dateLabel(date),
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Color(0xFF17367E),
-                        fontWeight: FontWeight.w700,
+                      style: TextStyle(
+                        color: palette.textPrimary,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
                   const SizedBox(width: 7),
-                  const Icon(
+                  Icon(
                     Icons.expand_more_rounded,
                     size: 18,
-                    color: Color(0xFF5D74A7),
+                    color: palette.textSecondary,
                   ),
                 ],
               ),
@@ -901,7 +935,7 @@ class _DateNavigator extends StatelessWidget {
         ),
         IconButton(
           onPressed: onNext,
-          icon: const Icon(Icons.chevron_right_rounded),
+          icon: Icon(Icons.chevron_right_rounded, color: palette.textSecondary),
         ),
       ],
     );
@@ -914,12 +948,13 @@ Future<void> _showCalendarPicker(
   ValueChanged<DateTime> onDateChanged,
 ) async {
   var draft = _dateOnly(selectedDate);
+  final palette = appThemePalette;
   final picked = await showModalBottomSheet<DateTime>(
     context: context,
     isScrollControlled: true,
     showDragHandle: false,
     backgroundColor: Colors.transparent,
-    barrierColor: const Color(0x660B2259),
+    barrierColor: Colors.black.withValues(alpha: .48),
     builder: (context) {
       return StatefulBuilder(
         builder: (context, setModalState) {
@@ -936,14 +971,19 @@ Future<void> _showCalendarPicker(
               top: false,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+                decoration: BoxDecoration(
+                  color: palette.surface,
+                  border: Border(top: BorderSide(color: palette.border)),
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(
+                      palette.geometry == AppThemeGeometry.rounded ? 30 : 0,
+                    ),
+                  ),
                   boxShadow: <BoxShadow>[
                     BoxShadow(
-                      color: Color(0x2510245A),
+                      color: palette.shadow,
                       blurRadius: 28,
-                      offset: Offset(0, -6),
+                      offset: const Offset(0, -6),
                     ),
                   ],
                 ),
@@ -955,19 +995,19 @@ Future<void> _showCalendarPicker(
                       height: 5,
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFD7DFEE),
+                        color: palette.textSecondary.withValues(alpha: .35),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
                     Row(
                       children: <Widget>[
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             'Chọn ngày xem lịch',
                             style: TextStyle(
-                              color: Color(0xFF102B73),
+                              color: palette.textPrimary,
                               fontSize: 18,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w900,
                             ),
                           ),
                         ),
@@ -981,13 +1021,7 @@ Future<void> _showCalendarPicker(
                     ),
                     const SizedBox(height: 4),
                     Theme(
-                      data: Theme.of(context).copyWith(
-                        colorScheme: Theme.of(context).colorScheme.copyWith(
-                          primary: const Color(0xFF1747B5),
-                          onPrimary: Colors.white,
-                          surface: Colors.white,
-                        ),
-                      ),
+                      data: buildBetterTheme(palette),
                       child: CalendarDatePicker(
                         initialDate: draft,
                         firstDate: DateTime(2020),
@@ -1015,9 +1049,7 @@ Future<void> _showCalendarPicker(
       );
     },
   );
-  if (picked != null) {
-    onDateChanged(_dateOnly(picked));
-  }
+  if (picked != null) onDateChanged(_dateOnly(picked));
 }
 
 class _ScheduleCard extends StatelessWidget {
@@ -1028,37 +1060,25 @@ class _ScheduleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final palette = appThemePalette;
+    final barColor = palette.id == AppThemeId.classic
+        ? accent
+        : palette.primary;
+    return AppThemePanel(
       constraints: const BoxConstraints(minHeight: 106),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x0F193B80),
-            blurRadius: 18,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
       child: Row(
         children: <Widget>[
           Container(
-            width: 4,
-            decoration: BoxDecoration(
-              color: accent,
-              borderRadius: const BorderRadius.horizontal(
-                left: Radius.circular(14),
-              ),
-            ),
+            width: palette.geometry == AppThemeGeometry.pixel ? 6 : 4,
+            color: barColor,
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Text(
               _time(item.startAt),
-              style: const TextStyle(
-                color: Color(0xFF173A87),
-                fontWeight: FontWeight.w800,
+              style: TextStyle(
+                color: palette.primary,
+                fontWeight: FontWeight.w900,
                 fontSize: 17,
               ),
             ),
@@ -1072,9 +1092,9 @@ class _ScheduleCard extends StatelessWidget {
                 children: <Widget>[
                   Text(
                     item.subjectName,
-                    style: const TextStyle(
-                      color: Color(0xFF18336F),
-                      fontWeight: FontWeight.w800,
+                    style: TextStyle(
+                      color: palette.textPrimary,
+                      fontWeight: FontWeight.w900,
                       fontSize: 16,
                     ),
                   ),
@@ -1115,44 +1135,34 @@ class _ExamCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final palette = appThemePalette;
+    return AppThemePanel(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(13),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x0E193B80),
-            blurRadius: 16,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
       child: Row(
         children: <Widget>[
           Container(
             width: 58,
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF1F5FF),
-              borderRadius: BorderRadius.circular(10),
+              color: palette.cardAlt,
+              border: Border.all(color: palette.border),
+              borderRadius: BorderRadius.circular(
+                palette.geometry == AppThemeGeometry.rounded ? 10 : 0,
+              ),
             ),
             child: Column(
               children: <Widget>[
                 Text(
                   item.startAt.day.toString().padLeft(2, '0'),
-                  style: const TextStyle(
-                    color: Color(0xFF173A87),
+                  style: TextStyle(
+                    color: palette.primary,
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 Text(
                   'THG ${item.startAt.month}',
-                  style: const TextStyle(
-                    color: Color(0xFF7583A4),
-                    fontSize: 10,
-                  ),
+                  style: TextStyle(color: palette.textSecondary, fontSize: 10),
                 ),
               ],
             ),
@@ -1164,19 +1174,16 @@ class _ExamCard extends StatelessWidget {
               children: <Widget>[
                 Text(
                   item.subjectName,
-                  style: const TextStyle(
-                    color: Color(0xFF18336F),
-                    fontWeight: FontWeight.w800,
+                  style: TextStyle(
+                    color: palette.textPrimary,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
                 if (item.examForm.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 4),
                   Text(
                     item.examForm,
-                    style: const TextStyle(
-                      color: Color(0xFF8A5A3B),
-                      fontSize: 11,
-                    ),
+                    style: TextStyle(color: palette.accent, fontSize: 11),
                   ),
                 ],
                 const SizedBox(height: 7),
@@ -1205,11 +1212,15 @@ class _SegmentTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return Container(
       height: 43,
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F6FC),
-        borderRadius: BorderRadius.circular(11),
+        color: palette.cardAlt,
+        border: Border.all(color: palette.border),
+        borderRadius: BorderRadius.circular(
+          palette.geometry == AppThemeGeometry.rounded ? 11 : 0,
+        ),
       ),
       child: Row(
         children: <Widget>[
@@ -1242,27 +1253,30 @@ class _TabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(
+        palette.geometry == AppThemeGeometry.rounded ? 10 : 0,
+      ),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         alignment: Alignment.center,
         margin: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(9),
-          boxShadow: selected
-              ? const <BoxShadow>[
-                  BoxShadow(color: Color(0x15193B80), blurRadius: 8),
-                ]
+          color: selected ? palette.card : Colors.transparent,
+          borderRadius: BorderRadius.circular(
+            palette.geometry == AppThemeGeometry.rounded ? 9 : 0,
+          ),
+          border: selected
+              ? Border.all(color: palette.primary.withValues(alpha: .45))
               : null,
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? const Color(0xFF1747B5) : const Color(0xFF7180A0),
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            color: selected ? palette.primary : palette.textSecondary,
+            fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
           ),
         ),
       ),
@@ -1277,22 +1291,20 @@ class _InfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final palette = appThemePalette;
+    return AppThemePanel(
       width: double.infinity,
+      elevated: false,
+      alt: true,
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFE),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EDF7)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
+          Text(
             'Dữ liệu trên thiết bị',
             style: TextStyle(
-              color: Color(0xFF18336F),
-              fontWeight: FontWeight.w800,
+              color: palette.textPrimary,
+              fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 12),
@@ -1308,7 +1320,7 @@ class _InfoPanel extends StatelessWidget {
             value: '${_dateShort(data.syncedAt)} ${_time(data.syncedAt)}',
           ),
           const SizedBox(height: 8),
-          _AccountInfoRow(label: 'Nguồn', value: 'QLĐT Phenikaa'),
+          const _AccountInfoRow(label: 'Nguồn', value: 'QLĐT Phenikaa'),
         ],
       ),
     );
@@ -1323,20 +1335,21 @@ class _AccountInfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return Row(
       children: <Widget>[
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(color: Color(0xFF7180A0), fontSize: 12),
+            style: TextStyle(color: palette.textSecondary, fontSize: 12),
           ),
         ),
         Text(
           value,
-          style: const TextStyle(
-            color: Color(0xFF244584),
+          style: TextStyle(
+            color: palette.textPrimary,
             fontSize: 12,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ],
@@ -1351,68 +1364,117 @@ class _WidgetPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Text(
+        Text(
           'Widget 1×4',
           style: TextStyle(
-            color: Color(0xFF18336F),
-            fontWeight: FontWeight.w800,
+            color: palette.textPrimary,
+            fontWeight: FontWeight.w900,
           ),
         ),
         const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: <Color>[Color(0xFF173A8E), Color(0xFF315AB5)],
+        ClipPath(
+          clipper: palette.geometry == AppThemeGeometry.valorant
+              ? const _WidgetValorantClipper()
+              : palette.geometry == AppThemeGeometry.lol
+              ? const _WidgetLolClipper()
+              : null,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: <Color>[palette.widgetStart, palette.widgetEnd],
+              ),
+              borderRadius: BorderRadius.circular(
+                palette.geometry == AppThemeGeometry.rounded ? 18 : 0,
+              ),
+              border: Border.all(color: palette.border.withValues(alpha: .8)),
             ),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                item.subjectName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  item.subjectName,
+                  style: TextStyle(
+                    color: palette.widgetText,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 7),
-              Row(
-                children: <Widget>[
-                  const Icon(
-                    Icons.location_on_outlined,
-                    color: Colors.white70,
-                    size: 15,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    item.room,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const Spacer(),
-                  const Icon(
-                    Icons.access_time_rounded,
-                    color: Colors.white70,
-                    size: 15,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    '${_time(item.startAt)} - ${_time(item.endAt)}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ),
-            ],
+                const SizedBox(height: 7),
+                Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.location_on_outlined,
+                      color: palette.widgetSubtext,
+                      size: 15,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      item.room,
+                      style: TextStyle(
+                        color: palette.widgetSubtext,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.access_time_rounded,
+                      color: palette.widgetSubtext,
+                      size: 15,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      '${_time(item.startAt)} - ${_time(item.endAt)}',
+                      style: TextStyle(
+                        color: palette.widgetSubtext,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ],
     );
   }
+}
+
+class _WidgetValorantClipper extends CustomClipper<Path> {
+  const new();
+  @override
+  Path getClip(Size size) => Path()
+    ..moveTo(12, 0)
+    ..lineTo(size.width, 0)
+    ..lineTo(size.width, size.height - 12)
+    ..lineTo(size.width - 12, size.height)
+    ..lineTo(0, size.height)
+    ..lineTo(0, 12)
+    ..close();
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+class _WidgetLolClipper extends CustomClipper<Path> {
+  const new();
+  @override
+  Path getClip(Size size) => Path()
+    ..moveTo(10, 0)
+    ..lineTo(size.width - 10, 0)
+    ..lineTo(size.width, 10)
+    ..lineTo(size.width, size.height - 10)
+    ..lineTo(size.width - 10, size.height)
+    ..lineTo(10, size.height)
+    ..lineTo(0, size.height - 10)
+    ..lineTo(0, 10)
+    ..close();
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
 class _ControlPanel extends StatelessWidget {
@@ -1428,14 +1490,15 @@ class _ControlPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: 1),
       duration: const Duration(milliseconds: 420),
       curve: Curves.easeOutCubic,
       builder: (context, progress, child) {
         return SizedBox(
-          width: 286,
-          height: 292,
+          width: 300,
+          height: 344,
           child: Stack(
             clipBehavior: Clip.none,
             children: <Widget>[
@@ -1443,35 +1506,35 @@ class _ControlPanel extends StatelessWidget {
                 progress: progress,
                 start: 0,
                 right: 4,
-                bottom: 205,
+                bottom: 254,
                 originOffset: const Offset(20, 78),
                 child: _PanelAction(
                   label: 'Lịch học',
                   icon: Icons.event_available_rounded,
-                  color: const Color(0xFF4A89FF),
+                  color: palette.primary,
                   selected: page == _AppPage.timetable,
                   onTap: () => onOpenPage(_AppPage.timetable),
                 ),
               ),
               _ArcPanelAction(
                 progress: progress,
-                start: .10,
-                right: 48,
-                bottom: 148,
+                start: .08,
+                right: 42,
+                bottom: 196,
                 originOffset: const Offset(34, 62),
                 child: _PanelAction(
                   label: 'Lịch thi',
                   icon: Icons.assignment_rounded,
-                  color: const Color(0xFF32C489),
+                  color: palette.accent,
                   selected: page == _AppPage.exam,
                   onTap: () => onOpenPage(_AppPage.exam),
                 ),
               ),
               _ArcPanelAction(
                 progress: progress,
-                start: .20,
-                right: 82,
-                bottom: 84,
+                start: .16,
+                right: 72,
+                bottom: 138,
                 originOffset: const Offset(46, 46),
                 child: _PanelAction(
                   label: 'Đồng bộ',
@@ -1483,16 +1546,30 @@ class _ControlPanel extends StatelessWidget {
               ),
               _ArcPanelAction(
                 progress: progress,
-                start: .30,
-                right: 96,
-                bottom: 16,
-                originOffset: const Offset(54, 26),
+                start: .24,
+                right: 92,
+                bottom: 80,
+                originOffset: const Offset(54, 30),
                 child: _PanelAction(
                   label: 'Tài khoản',
                   icon: Icons.person_rounded,
-                  color: const Color(0xFF8154D9),
+                  color: palette.primary,
                   selected: page == _AppPage.account,
                   onTap: () => onOpenPage(_AppPage.account),
+                ),
+              ),
+              _ArcPanelAction(
+                progress: progress,
+                start: .32,
+                right: 100,
+                bottom: 20,
+                originOffset: const Offset(58, 20),
+                child: _PanelAction(
+                  label: 'Giao diện',
+                  icon: Icons.palette_outlined,
+                  color: palette.accent,
+                  selected: false,
+                  onTap: () => showAppThemePicker(context),
                 ),
               ),
             ],
@@ -1562,45 +1639,42 @@ class _PanelAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(30),
-        child: Container(
-          height: 50,
+        child: AppThemePanel(
+          elevated: true,
           padding: const EdgeInsets.fromLTRB(18, 5, 5, 5),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(30),
-            border: selected
-                ? Border.all(color: color.withValues(alpha: .35))
-                : null,
-            boxShadow: const <BoxShadow>[
-              BoxShadow(
-                color: Color(0x28112452),
-                blurRadius: 16,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Color(0xFF203A76),
-                  fontWeight: FontWeight.w700,
+          child: SizedBox(
+            height: 40,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? palette.primary : palette.textPrimary,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: themeLetterSpacing(palette),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: color,
-                child: Icon(icon, color: Colors.white, size: 20),
-              ),
-            ],
+                const SizedBox(width: 12),
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: color,
+                  child: Icon(
+                    icon,
+                    color:
+                        palette.id == AppThemeId.lol && color == palette.primary
+                        ? const Color(0xFF06171D)
+                        : Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1616,14 +1690,15 @@ class _MetaLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return Row(
       children: <Widget>[
-        Icon(icon, size: 15, color: const Color(0xFF6F7FA2)),
+        Icon(icon, size: 15, color: palette.textSecondary),
         const SizedBox(width: 5),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(color: Color(0xFF6F7FA2), fontSize: 12),
+            style: TextStyle(color: palette.textSecondary, fontSize: 12),
           ),
         ),
       ],
@@ -1640,19 +1715,20 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(icon, size: 52, color: const Color(0xFFA4B2CE)),
+            Icon(icon, size: 52, color: palette.primary.withValues(alpha: .6)),
             const SizedBox(height: 14),
             Text(
               title,
-              style: const TextStyle(
-                color: Color(0xFF244584),
-                fontWeight: FontWeight.w800,
+              style: TextStyle(
+                color: palette.textPrimary,
+                fontWeight: FontWeight.w900,
                 fontSize: 16,
               ),
             ),
@@ -1660,8 +1736,8 @@ class _EmptyState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF7A88A7),
+              style: TextStyle(
+                color: palette.textSecondary,
                 height: 1.45,
                 fontSize: 13,
               ),
@@ -1716,8 +1792,9 @@ class _PhoneSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
     return ColoredBox(
-      color: Colors.white,
+      color: palette.surface.withValues(alpha: palette.dark ? .94 : .985),
       child: SizedBox.expand(child: child),
     );
   }
@@ -1730,17 +1807,33 @@ class _AppMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = appThemePalette;
+    final square = palette.geometry != AppThemeGeometry.rounded;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * .2),
-        border: Border.all(color: const Color(0xFF183F9C), width: size * .08),
+        color: palette.card.withValues(alpha: .35),
+        borderRadius: BorderRadius.circular(square ? 0 : size * .2),
+        border: Border.all(
+          color: palette.primary,
+          width: palette.geometry == AppThemeGeometry.pixel
+              ? size * .07
+              : size * .08,
+        ),
+        boxShadow: palette.geometry == AppThemeGeometry.pixel
+            ? <BoxShadow>[
+                BoxShadow(
+                  color: palette.shadow,
+                  offset: Offset(size * .06, size * .06),
+                ),
+              ]
+            : null,
       ),
       child: Icon(
-        Icons.check_rounded,
-        size: size * .62,
-        color: const Color(0xFF183F9C),
+        AppThemeController.instance.theme.icon,
+        size: size * .58,
+        color: palette.primary,
       ),
     );
   }

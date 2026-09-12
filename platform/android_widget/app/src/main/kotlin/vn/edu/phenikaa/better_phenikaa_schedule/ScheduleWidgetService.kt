@@ -118,14 +118,15 @@ private class ScheduleWidgetFactory(
         val widthPx = width.toFloat()
         val heightPx = height.toFloat()
 
+        val theme = readWidgetTheme(context)
         val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             shader = LinearGradient(
                 0f,
                 0f,
                 widthPx,
                 0f,
-                0xFF173A8E.toInt(),
-                0xFF315AB5.toInt(),
+                theme.startColor,
+                theme.endColor,
                 Shader.TileMode.CLAMP,
             )
         }
@@ -145,13 +146,14 @@ private class ScheduleWidgetFactory(
         val detailRight = widthPx * DETAIL_RIGHT_FRACTION
 
         val subjectPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFFFFFFFF.toInt()
+            color = theme.textColor
             textSize = heightPx * SUBJECT_TEXT_HEIGHT_FRACTION
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            typeface = themedTypeface(context, theme, Typeface.BOLD)
         }
         val detailPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFFDDE8FF.toInt()
+            color = theme.subtextColor
             textSize = heightPx * DETAIL_TEXT_HEIGHT_FRACTION
+            typeface = themedTypeface(context, theme, Typeface.NORMAL)
         }
 
         val titleMaxWidth = (titleRight - left).coerceAtLeast(
@@ -202,6 +204,45 @@ private class ScheduleWidgetFactory(
         }
 
         return horizontal
+    }
+}
+
+private data class WidgetTheme(
+    val key: String,
+    val startColor: Int,
+    val endColor: Int,
+    val textColor: Int,
+    val subtextColor: Int,
+)
+
+private fun readWidgetTheme(context: Context): WidgetTheme {
+    val key = context
+        .getSharedPreferences(SNAPSHOT_PREFS, Context.MODE_PRIVATE)
+        .getString(THEME_KEY, "classic")
+        ?: "classic"
+    return when (key) {
+        "lol" -> WidgetTheme(key, 0xFF06131A.toInt(), 0xFF0B343A.toInt(), 0xFFF0E6D2.toInt(), 0xFFC8AA6E.toInt())
+        "valorant" -> WidgetTheme(key, 0xFF0F1923.toInt(), 0xFF24313B.toInt(), 0xFFECE8E1.toInt(), 0xFFFF7B86.toInt())
+        "minecraft" -> WidgetTheme(key, 0xFF3A2B20.toInt(), 0xFF6B4A2F.toInt(), 0xFFFFFFFF.toInt(), 0xFFD8D1C9.toInt())
+        "facebook" -> WidgetTheme(key, 0xFFFFFFFF.toInt(), 0xFFE7F3FF.toInt(), 0xFF050505.toInt(), 0xFF65676B.toInt())
+        "shopee" -> WidgetTheme(key, 0xFFEE4D2D.toInt(), 0xFFFF6A3D.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFE9E1.toInt())
+        "tiktok" -> WidgetTheme(key, 0xFF111111.toInt(), 0xFF2A1520.toInt(), 0xFFFFFFFF.toInt(), 0xFF25F4EE.toInt())
+        "ben10" -> WidgetTheme(key, 0xFF101510.toInt(), 0xFF1D5F22.toInt(), 0xFFFFFFFF.toInt(), 0xFF7CFF00.toInt())
+        "youtube" -> WidgetTheme(key, 0xFF181818.toInt(), 0xFF2B0E14.toInt(), 0xFFFFFFFF.toInt(), 0xFFFF8A9F.toInt())
+        "steam" -> WidgetTheme(key, 0xFF171D25.toInt(), 0xFF1B3D55.toInt(), 0xFFD6E9F8.toInt(), 0xFF66C0F4.toInt())
+        else -> WidgetTheme("classic", 0xFF173A8E.toInt(), 0xFF315AB5.toInt(), 0xFFFFFFFF.toInt(), 0xFFDDE8FF.toInt())
+    }
+}
+
+private fun themedTypeface(context: Context, theme: WidgetTheme, style: Int): Typeface {
+    if (theme.key != "minecraft") {
+        return Typeface.create(Typeface.DEFAULT, style)
+    }
+    return try {
+        val base = context.resources.getFont(R.font.minecraft_custom)
+        Typeface.create(base, style)
+    } catch (_: Exception) {
+        Typeface.create(Typeface.MONOSPACE, style)
     }
 }
 
@@ -355,6 +396,7 @@ private data class WidgetClass(
 
 private const val SNAPSHOT_PREFS = "FlutterSharedPreferences"
 private const val SNAPSHOT_KEY = "flutter.better_phenikaa_snapshot_v1"
+private const val THEME_KEY = "flutter.appTheme"
 private const val DATE_PATTERN = "yyyy-MM-dd"
 private const val DATE_TIME_PATTERN = "yyyy-MM-dd'T'HH:mm:ss"
 private const val DEFAULT_WIDGET_WIDTH_DP = 320

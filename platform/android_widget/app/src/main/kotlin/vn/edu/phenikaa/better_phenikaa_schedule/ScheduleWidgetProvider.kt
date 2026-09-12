@@ -151,6 +151,25 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             putExtra(EXTRA_RENDER_HEIGHT_DP, renderHeightDp)
             data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken")
         }
+        val themeKey = context
+            .getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            .getString("flutter.appTheme", "classic")
+            ?: "classic"
+        val themeEndColor = when (themeKey) {
+            "lol" -> 0xFF0B343A.toInt()
+            "valorant" -> 0xFF24313B.toInt()
+            "minecraft" -> 0xFF6B4A2F.toInt()
+            "facebook" -> 0xFFE7F3FF.toInt()
+            "shopee" -> 0xFFFF6A3D.toInt()
+            "tiktok" -> 0xFF2A1520.toInt()
+            "ben10" -> 0xFF1D5F22.toInt()
+            "youtube" -> 0xFF2B0E14.toInt()
+            "steam" -> 0xFF1B3D55.toInt()
+            else -> 0xFF315AB5.toInt()
+        }
+        val iconColor = if (themeKey == "facebook") 0xFF0866FF.toInt() else 0xFFFFFFFF.toInt()
+        views.setInt(R.id.widget_stack_peek_mask, "setBackgroundColor", themeEndColor)
+        views.setInt(R.id.widget_calendar, "setColorFilter", iconColor)
         views.setRemoteAdapter(R.id.widget_list, serviceIntent)
         views.setEmptyView(R.id.widget_list, R.id.widget_empty)
 
