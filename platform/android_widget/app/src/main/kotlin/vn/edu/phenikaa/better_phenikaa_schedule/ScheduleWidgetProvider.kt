@@ -56,6 +56,9 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         val contentToken = collectionContentToken(context, widgetId, options)
         val previousToken = renderStatePrefs.getString(contentTokenKey(widgetId), null)
         val collectionChanged = previousToken != contentToken
+        val themeKey = readThemeColors(context).key
+        val previousThemeKey = renderStatePrefs.getString(themeTokenKey(widgetId), null)
+        val themeChanged = previousThemeKey != themeKey
 
         val views = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val exactSizes = exactWidgetSizes(options)
@@ -95,10 +98,18 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         if (collectionChanged) {
             appWidgetManager.updateAppWidget(widgetId, views)
             appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
-            renderStatePrefs.edit().putString(contentTokenKey(widgetId), contentToken).apply()
+            renderStatePrefs.edit()
+                .putString(contentTokenKey(widgetId), contentToken)
+                .putString(themeTokenKey(widgetId), themeKey)
+                .apply()
+        } else if (themeChanged) {
+            // Keep the adapter identity stable. Repaint its existing children in place;
+            // their opaque backgrounds prevent any neighbouring item from showing
+            // through during the refresh.
+            appWidgetManager.partiallyUpdateAppWidget(widgetId, views)
+            appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
+            renderStatePrefs.edit().putString(themeTokenKey(widgetId), themeKey).apply()
         } else {
-            // Theme-only path: update background/calendar chrome without touching
-            // StackView or its adapter. No old/new collection frames can overlap.
             appWidgetManager.partiallyUpdateAppWidget(widgetId, views)
         }
     }
@@ -295,6 +306,8 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
     }
 
     private fun contentTokenKey(widgetId: Int): String = "content_token_$widgetId"
+
+    private fun themeTokenKey(widgetId: Int): String = "theme_token_$widgetId"
 
     @Suppress("DEPRECATION")
     private fun exactWidgetSizes(options: Bundle): List<SizeF> {

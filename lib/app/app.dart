@@ -1538,7 +1538,7 @@ class _ControlPanel extends StatelessWidget {
                 child: _PanelAction(
                   label: 'Lịch thi',
                   icon: Icons.assignment_rounded,
-                  color: palette.accent,
+                  color: _panelSecondaryColor(palette),
                   selected: page == _AppPage.exam,
                   onTap: () => onOpenPage(_AppPage.exam),
                 ),
@@ -1580,7 +1580,7 @@ class _ControlPanel extends StatelessWidget {
                 child: _PanelAction(
                   label: 'Giao diện',
                   icon: Icons.palette_outlined,
-                  color: palette.accent,
+                  color: _panelTertiaryColor(palette),
                   selected: false,
                   onTap: () => showAppThemePicker(context),
                 ),
@@ -1679,10 +1679,7 @@ class _PanelAction extends StatelessWidget {
                   backgroundColor: color,
                   child: Icon(
                     icon,
-                    color:
-                        palette.id == AppThemeId.lol && color == palette.primary
-                        ? const Color(0xFF06171D)
-                        : Colors.white,
+                    color: _contrastForeground(color),
                     size: 20,
                   ),
                 ),
@@ -1694,6 +1691,17 @@ class _PanelAction extends StatelessWidget {
     );
   }
 }
+
+Color _panelSecondaryColor(AppThemePalette palette) =>
+    Color.lerp(palette.primary, palette.accent, .34) ?? palette.primary;
+
+Color _panelTertiaryColor(AppThemePalette palette) =>
+    Color.lerp(palette.primary, palette.accent, .68) ?? palette.primary;
+
+Color _contrastForeground(Color background) =>
+    background.computeLuminance() > .52
+    ? const Color(0xFF151515)
+    : Colors.white;
 
 class _MetaLine extends StatelessWidget {
   const new({required this.icon, required this.text});
