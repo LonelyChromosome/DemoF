@@ -147,21 +147,27 @@ p = provider.read_text(encoding='utf-8')
 p = replace_once(p, 'import android.os.Bundle\n', 'import android.os.Bundle\nimport android.os.Handler\nimport android.os.Looper\n', 'handler imports')
 p = replace_once(p, 'import android.util.TypedValue\n', 'import android.util.TypedValue\nimport android.view.View\n', 'view import')
 
-# Add cover flag to all build calls by extending function signature and injecting arg.
 p = replace_once(
     p,
     '''        val themeChanged = previousThemeKey != themeKey\n\n        val views = if''',
     '''        val themeChanged = previousThemeKey != themeKey\n        val showRefreshCover = collectionChanged || themeChanged\n\n        val views = if''',
     'cover flag',
 )
-p = p.replace(
-    '                        bindCollection = collectionChanged,\n                    )',
-    '                        bindCollection = collectionChanged,\n                        showRefreshCover = showRefreshCover,\n                    )',
+
+# Extend every buildWidgetViews call, regardless of indentation/branch.
+def inject_cover_arg(match: re.Match[str]) -> str:
+    indent = match.group(1)
+    return (
+        f'{indent}bindCollection = collectionChanged,\n'
+        f'{indent}showRefreshCover = showRefreshCover,\n'
+    )
+
+p = re.sub(
+    r'(?m)^(\s*)bindCollection = collectionChanged,\n',
+    inject_cover_arg,
+    p,
 )
-p = p.replace(
-    '                    bindCollection = collectionChanged,\n                )',
-    '                    bindCollection = collectionChanged,\n                    showRefreshCover = showRefreshCover,\n                )',
-)
+
 p = replace_once(
     p,
     '''        visualHeightDp: Float,\n        bindCollection: Boolean,\n    ): RemoteViews {''',
@@ -169,12 +175,10 @@ p = replace_once(
     'build views signature',
 )
 
-# Configure the cover with the exact same rendered item.
 cover_marker = '''        views.setTextColor(R.id.widget_empty, theme.textColor)\n\n        if (bindCollection) {'''
-cover_block = '''        views.setTextColor(R.id.widget_empty, theme.textColor)\n\n        if (showRefreshCover) {\n            val cover = renderWidgetRefreshCover(\n                context,\n                widgetId,\n                renderWidthDp,\n                renderHeightDp,\n            )\n            if (cover != null) {\n                views.setImageViewBitmap(R.id.widget_refresh_cover, cover)\n                views.setViewVisibility(R.id.widget_refresh_cover, View.VISIBLE)\n                // The cover is item zero, so make the refreshed collection reveal\n                // the exact same card when the cover is removed.\n                views.setDisplayedChild(R.id.widget_list, 0)\n            } else {\n                views.setViewVisibility(R.id.widget_refresh_cover, View.GONE)\n            }\n        } else {\n            views.setViewVisibility(R.id.widget_refresh_cover, View.GONE)\n        }\n\n        if (bindCollection) {'''
+cover_block = '''        views.setTextColor(R.id.widget_empty, theme.textColor)\n\n        if (showRefreshCover) {\n            val cover = renderWidgetRefreshCover(\n                context,\n                widgetId,\n                renderWidthDp,\n                renderHeightDp,\n            )\n            if (cover != null) {\n                views.setImageViewBitmap(R.id.widget_refresh_cover, cover)\n                views.setViewVisibility(R.id.widget_refresh_cover, View.VISIBLE)\n                views.setDisplayedChild(R.id.widget_list, 0)\n            } else {\n                views.setViewVisibility(R.id.widget_refresh_cover, View.GONE)\n            }\n        } else {\n            views.setViewVisibility(R.id.widget_refresh_cover, View.GONE)\n        }\n\n        if (bindCollection) {'''
 p = replace_once(p, cover_marker, cover_block, 'cover configuration')
 
-# Schedule removal after dataset invalidation. Apply on both content/theme refresh paths.
 p = replace_once(
     p,
     '''            renderStatePrefs.edit()\n                .putString(contentTokenKey(widgetId), contentToken)\n                .putString(themeTokenKey(widgetId), themeKey)\n                .apply()\n        } else if (themeChanged) {''',
@@ -192,10 +196,8 @@ helper_marker = '''    private data class ThemeColors(\n'''
 helper_code = '''    private fun scheduleRefreshCoverHide(\n        context: Context,\n        appWidgetManager: AppWidgetManager,\n        widgetId: Int,\n    ) {\n        Handler(Looper.getMainLooper()).postDelayed({\n            val reveal = RemoteViews(context.packageName, R.layout.schedule_widget)\n            reveal.setViewVisibility(R.id.widget_refresh_cover, View.GONE)\n            appWidgetManager.partiallyUpdateAppWidget(widgetId, reveal)\n        }, REFRESH_COVER_HOLD_MS)\n    }\n\n'''
 p = replace_once(p, helper_marker, helper_code + helper_marker, 'cover hide helper')
 
-# Add duration constant near companion/static constants. Use final file fallback marker.
 const_marker = 'private const val CALENDAR_HEIGHT_FRACTION'
 if const_marker not in p:
-    # Constants may be inside companion object and still use this marker in current file.
     raise RuntimeError('calendar constant marker missing')
 p = p.replace(const_marker, 'private const val REFRESH_COVER_HOLD_MS = 1250L\n        ' + const_marker, 1)
 provider.write_text(p, encoding='utf-8')
