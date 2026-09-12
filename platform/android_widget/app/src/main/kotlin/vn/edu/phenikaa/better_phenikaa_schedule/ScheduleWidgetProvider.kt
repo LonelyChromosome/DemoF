@@ -154,16 +154,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 calendarPaddingPx,
                 calendarPaddingPx,
             )
-            views.setViewLayoutWidth(
-                R.id.widget_stack_peek_mask,
-                widthDp * STACK_MASK_WIDTH_FRACTION,
-                TypedValue.COMPLEX_UNIT_DIP,
-            )
-            views.setViewLayoutHeight(
-                R.id.widget_stack_peek_mask,
-                heightDp * STACK_MASK_HEIGHT_FRACTION,
-                TypedValue.COMPLEX_UNIT_DIP,
-            )
         }
 
         val theme = readThemeColors(context)
@@ -171,7 +161,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             R.id.widget_theme_background,
             renderThemeBackground(context, renderWidthDp, renderHeightDp, theme),
         )
-        views.setInt(R.id.widget_stack_peek_mask, "setBackgroundColor", theme.endColor)
         views.setInt(R.id.widget_calendar, "setColorFilter", theme.iconColor)
         views.setTextColor(R.id.widget_empty, theme.textColor)
 
@@ -359,8 +348,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         private const val CALENDAR_HEIGHT_FRACTION = 0.42f
         private const val CALENDAR_WIDTH_FRACTION = 0.085f
         private const val CALENDAR_PADDING_FRACTION = 0.19f
-        private const val STACK_MASK_WIDTH_FRACTION = 0.11f
-        private const val STACK_MASK_HEIGHT_FRACTION = 0.40f
         private const val DEFAULT_WIDGET_WIDTH_DP = 320
         private const val DEFAULT_WIDGET_HEIGHT_DP = 64
     }

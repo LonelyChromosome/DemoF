@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -335,6 +336,9 @@ class AppThemeController extends ChangeNotifier {
   static final AppThemeController instance = AppThemeController._();
   static const _preferenceKey = 'better_phenikaa_theme_v2';
   static const _widgetPreferenceKey = 'appTheme';
+  static const MethodChannel _widgetThemeChannel = MethodChannel(
+    'better_phenikaa/widget_theme',
+  );
 
   AppThemeId _theme = AppThemeId.classic;
   bool _loaded = false;
@@ -364,12 +368,34 @@ class AppThemeController extends ChangeNotifier {
     if (_theme == value) return;
     _theme = value;
     notifyListeners();
+
+    // Dispatch the native widget update at the exact theme tap. The widget's
+    // theme-only path is a partial RemoteViews update and never rebinds StackView.
+    final nativeUpdate = _applyWidgetThemeImmediately(value.storageKey);
     final prefs = await SharedPreferences.getInstance();
     await Future.wait<bool>(<Future<bool>>[
       prefs.setString(_preferenceKey, value.storageKey),
       prefs.setString(_widgetPreferenceKey, value.storageKey),
     ]);
-    await _syncWidgetTheme();
+    final nativeApplied = await nativeUpdate;
+    if (!nativeApplied) {
+      await _syncWidgetTheme();
+    }
+  }
+
+  Future<bool> _applyWidgetThemeImmediately(String themeKey) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
+    try {
+      await _widgetThemeChannel.invokeMethod<int>(
+        'applyTheme',
+        <String, Object>{'theme': themeKey},
+      );
+      return true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
   }
 
   Future<void> _syncWidgetTheme() async {
