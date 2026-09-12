@@ -365,14 +365,15 @@ class AppThemeController extends ChangeNotifier {
     _theme = value;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_preferenceKey, value.storageKey);
-    await prefs.setString(_widgetPreferenceKey, value.storageKey);
+    await Future.wait<bool>(<Future<bool>>[
+      prefs.setString(_preferenceKey, value.storageKey),
+      prefs.setString(_widgetPreferenceKey, value.storageKey),
+    ]);
     await _syncWidgetTheme();
   }
 
   Future<void> _syncWidgetTheme() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
-    await HomeWidget.saveWidgetData<String>('appTheme', _theme.storageKey);
     await HomeWidget.updateWidget(
       name: 'ScheduleWidgetProvider',
       androidName: 'ScheduleWidgetProvider',
