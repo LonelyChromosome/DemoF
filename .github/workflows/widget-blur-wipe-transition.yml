@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/widget-blur-wipe-transition.yml'
       - 'tool/apply_widget_blur_wipe_transition.py'
+      - 'tool/fix_widget_blur_compat.py'
 
 permissions:
   contents: write
@@ -21,7 +22,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply blur wipe transition
-        run: python3 tool/apply_widget_blur_wipe_transition.py
+        run: |
+          python3 tool/apply_widget_blur_wipe_transition.py
+          python3 tool/fix_widget_blur_compat.py
 
       - name: Java 17
         uses: actions/setup-java@v4
@@ -59,8 +62,9 @@ jobs:
           grep -q 'TRANSITION_PREPARE_MS = 520L' "$P"
           grep -q 'widget_list, View.INVISIBLE' "$P"
           grep -q 'renderWidgetTransitionFrame' "$S"
-          grep -q 'RenderEffect.createBlurEffect' "$S"
-          grep -q 'frostPaint.setRenderEffect' "$S"
+          grep -q 'val taps = arrayOf' "$S"
+          grep -q 'frostCenterPaint' "$S"
+          ! grep -q 'RenderEffect' "$S"
           grep -q 'TRANSITION_EDGE_WIDTH_FRACTION' "$S"
           ! grep -q 'COLLECTION_READY_SETTLE_MS' "$P"
           ! grep -q 'setDisplayedChild(R.id.widget_list, 0)' "$P" || grep -q 'resetChildKey(widgetId)' "$P"
@@ -91,5 +95,5 @@ jobs:
           git add platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt \
                   platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetService.kt \
                   pubspec.yaml
-          git commit -m 'feat: mask widget refresh with blur wipe transition'
+          git commit -m 'feat: mask widget refresh with frosted wipe transition'
           git push origin HEAD:main
