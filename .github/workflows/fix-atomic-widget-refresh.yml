@@ -1,5 +1,6 @@
 name: Fix atomic widget refresh
 
+# rerun after fixing every buildWidgetViews call
 on:
   push:
     branches:
