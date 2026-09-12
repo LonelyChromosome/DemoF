@@ -37,7 +37,6 @@ jobs:
           p = Path('tool/implement_themes_v2.py')
           s = p.read_text(encoding='utf-8')
           s = s.replace('Icons.facebook_rounded', 'Icons.facebook')
-          # Dart switch statements do not fall through. Make every painter branch explicit.
           replacements = {
               "        canvas.drawRect(Rect.fromLTWH(0, 0, size.width, block * .28), paint);\n      case AppThemeId.valorant:":
                   "        canvas.drawRect(Rect.fromLTWH(0, 0, size.width, block * .28), paint);\n        break;\n      case AppThemeId.valorant:",
@@ -83,6 +82,9 @@ jobs:
 
       - name: Bootstrap Android and dependencies
         run: bash tool/bootstrap.sh
+
+      - name: Apply safe Dart fixes
+        run: dart fix --apply
 
       - name: Format
         run: dart format lib test
