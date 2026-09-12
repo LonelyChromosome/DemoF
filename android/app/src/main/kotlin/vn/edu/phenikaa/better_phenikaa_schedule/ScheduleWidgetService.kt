@@ -46,13 +46,16 @@ private class ScheduleWidgetFactory(
     private val renderHeightDp: Int,
 ) : RemoteViewsService.RemoteViewsFactory {
     private var items: List<WidgetClass> = emptyList()
+    private var readySignalSent = false
 
     override fun onCreate() {
         reload()
+        readySignalSent = false
     }
 
     override fun onDataSetChanged() {
         reload()
+        readySignalSent = false
     }
 
     override fun onDestroy() {
@@ -84,6 +87,7 @@ private class ScheduleWidgetFactory(
             R.id.widget_slide_image,
             renderSlide(item),
         )
+        signalReadyOnce()
         views.setOnClickFillInIntent(
             R.id.widget_slide_item,
             Intent().apply {
@@ -125,6 +129,21 @@ private class ScheduleWidgetFactory(
         items = readWidgetClasses(context, widgetId)
     }
 
+    private fun signalReadyOnce() {
+        if (readySignalSent || widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+            return
+        }
+        readySignalSent = true
+        val readyThemeKey = readWidgetTheme(context).key
+        context.sendBroadcast(
+            Intent(context, ScheduleWidgetProvider::class.java).apply {
+                action = ScheduleWidgetProvider.ACTION_COLLECTION_FRAME_READY
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                putExtra(ScheduleWidgetProvider.EXTRA_READY_THEME_KEY, readyThemeKey)
+            },
+        )
+    }
+
     private fun renderSlide(item: WidgetClass): Bitmap =
         renderWidgetSlide(context, item, renderWidthDp, renderHeightDp)
 
@@ -136,6 +155,7 @@ private fun renderWidgetSlide(
     item: WidgetClass,
     renderWidthDp: Int,
     renderHeightDp: Int,
+    themeOverrideKey: String? = null,
 ): Bitmap {
         val density = context.resources.displayMetrics.density
         val widthDp = renderWidthDp.coerceAtLeast(1)
@@ -146,7 +166,7 @@ private fun renderWidgetSlide(
         val canvas = Canvas(horizontal)
         val widthPx = width.toFloat()
         val heightPx = height.toFloat()
-        val theme = readWidgetTheme(context)
+        val theme = themeOverrideKey?.let(::widgetThemeForKey) ?: readWidgetTheme(context)
 
         // StackView keeps neighbouring children alive. Every child must be opaque;
         // transparent text-only children can all become visible together after a
@@ -249,9 +269,95 @@ internal fun renderWidgetRefreshCover(
     widgetId: Int,
     renderWidthDp: Int,
     renderHeightDp: Int,
+    themeOverrideKey: String? = null,
 ): Bitmap? {
     val first = readWidgetClasses(context, widgetId).firstOrNull() ?: return null
-    return renderWidgetSlide(context, first, renderWidthDp, renderHeightDp)
+    return renderWidgetSlide(
+        context,
+        first,
+        renderWidthDp,
+        renderHeightDp,
+        themeOverrideKey,
+    )
+}
+
+internal fun renderWidgetThemeTransitionOverlay(
+    context: Context,
+    renderWidthDp: Int,
+    renderHeightDp: Int,
+    progress: Float,
+    oldThemeKey: String,
+): Bitmap {
+    val density = context.resources.displayMetrics.density
+    val width = (renderWidthDp.coerceAtLeast(1) * density).toInt().coerceAtLeast(1)
+    val height = (renderHeightDp.coerceAtLeast(1) * density).toInt().coerceAtLeast(1)
+    val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(output)
+    val p = progress.coerceIn(0f, 1f)
+    if (p <= 0f) return output
+
+    // Keep the real StackView visible beneath this transparent shimmer. The
+    // currently displayed subject therefore survives the entire transition and
+    // the target theme is never painted before the last animation frame.
+    val theme = widgetThemeForKey(oldThemeKey)
+    val red = (theme.startColor shr 16) and 0xFF
+    val green = (theme.startColor shr 8) and 0xFF
+    val blue = theme.startColor and 0xFF
+    val luminance = (red * 299 + green * 587 + blue * 114) / 1000
+    val effectRgb = if (luminance > 170) 0x000000 else 0xFFFFFF
+    val pulse = if (p <= 0.5f) p * 2f else (1f - p) * 2f
+    val washAlpha = (pulse * TRANSITION_WASH_MAX_ALPHA).toInt().coerceIn(0, 255)
+    if (washAlpha > 0) {
+        canvas.drawColor((washAlpha shl 24) or effectRgb)
+    }
+
+    val bandWidth = (width * TRANSITION_BAND_WIDTH_FRACTION).coerceAtLeast(1f)
+    val center = -bandWidth + p * (width + bandWidth * 2f)
+    val left = (center - bandWidth).coerceAtLeast(0f)
+    val right = (center + bandWidth).coerceAtMost(width.toFloat())
+    if (right > left) {
+        val transparent = effectRgb
+        val bright = (TRANSITION_BAND_MAX_ALPHA shl 24) or effectRgb
+        val shimmer = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(
+                left,
+                0f,
+                right,
+                0f,
+                intArrayOf(transparent, bright, transparent),
+                floatArrayOf(0f, 0.5f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+        }
+        canvas.drawRect(left, 0f, right, height.toFloat(), shimmer)
+    }
+
+    return output
+}
+
+internal fun widgetTransitionDisplayIndex(context: Context, widgetId: Int): Int {
+    val items = readWidgetClasses(context, widgetId)
+    val realClassIndex = items.indexOfFirst { !it.id.startsWith(EMPTY_DAY_ID_PREFIX) }
+    return if (realClassIndex >= 0) realClassIndex else 0
+}
+
+internal fun renderWidgetTransitionCover(
+    context: Context,
+    widgetId: Int,
+    renderWidthDp: Int,
+    renderHeightDp: Int,
+    themeKey: String,
+): Bitmap? {
+    val items = readWidgetClasses(context, widgetId)
+    val item = items.getOrNull(widgetTransitionDisplayIndex(context, widgetId))
+        ?: return null
+    return renderWidgetSlide(
+        context,
+        item,
+        renderWidthDp,
+        renderHeightDp,
+        themeKey,
+    )
 }
 
 private data class WidgetTheme(
@@ -267,7 +373,10 @@ private fun readWidgetTheme(context: Context): WidgetTheme {
         .getSharedPreferences(SNAPSHOT_PREFS, Context.MODE_PRIVATE)
         .getString(THEME_KEY, "classic")
         ?: "classic"
-    return when (key) {
+    return widgetThemeForKey(key)
+}
+
+private fun widgetThemeForKey(key: String): WidgetTheme = when (key) {
         "lol" -> WidgetTheme(key, 0xFF06131A.toInt(), 0xFF0B343A.toInt(), 0xFFF0E6D2.toInt(), 0xFFC8AA6E.toInt())
         "valorant" -> WidgetTheme(key, 0xFF0F1923.toInt(), 0xFF24313B.toInt(), 0xFFECE8E1.toInt(), 0xFFFF7B86.toInt())
         "minecraft" -> WidgetTheme(key, 0xFF3A2B20.toInt(), 0xFF6B4A2F.toInt(), 0xFFFFFFFF.toInt(), 0xFFD8D1C9.toInt())
@@ -279,7 +388,6 @@ private fun readWidgetTheme(context: Context): WidgetTheme {
         "steam" -> WidgetTheme(key, 0xFF171D25.toInt(), 0xFF1B3D55.toInt(), 0xFFD6E9F8.toInt(), 0xFF66C0F4.toInt())
         else -> WidgetTheme("classic", 0xFF173A8E.toInt(), 0xFF315AB5.toInt(), 0xFFFFFFFF.toInt(), 0xFFDDE8FF.toInt())
     }
-}
 
 private fun themedTypeface(context: Context, theme: WidgetTheme, style: Int): Typeface {
     if (theme.key != "minecraft") {
@@ -446,6 +554,10 @@ private const val SNAPSHOT_KEY = "flutter.better_phenikaa_snapshot_v1"
 private const val THEME_KEY = "flutter.appTheme"
 private const val DATE_PATTERN = "yyyy-MM-dd"
 private const val DATE_TIME_PATTERN = "yyyy-MM-dd'T'HH:mm:ss"
+private const val EMPTY_DAY_ID_PREFIX = "empty-day-"
+private const val TRANSITION_WASH_MAX_ALPHA = 18f
+private const val TRANSITION_BAND_MAX_ALPHA = 72
+private const val TRANSITION_BAND_WIDTH_FRACTION = 0.16f
 private const val DEFAULT_WIDGET_WIDTH_DP = 320
 private const val DEFAULT_WIDGET_HEIGHT_DP = 64
 
