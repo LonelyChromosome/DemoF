@@ -1,0 +1,378 @@
+name: Fix Better Phenikaa 2.0 UI and widget
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/fix-v2-ui-widget.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply UI and widget fixes
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          # ---------- Flutter: make the whole visible app rebuild immediately ----------
+          app = Path('lib/app/app.dart')
+          s = app.read_text(encoding='utf-8')
+          s = s.replace(
+              "class _AppRootState extends State<_AppRoot> {\n  static const _storageKey = 'better_phenikaa_snapshot_v1';\n",
+              "class _AppRootState extends State<_AppRoot> {\n  static const _storageKey = 'better_phenikaa_snapshot_v1';\n  final AppThemeController _themes = AppThemeController.instance;\n",
+              1,
+          )
+          s = s.replace(
+              "  void initState() {\n    super.initState();\n    unawaited(_restore());\n  }\n",
+              "  void initState() {\n    super.initState();\n    _themes.addListener(_onThemeChanged);\n    unawaited(_restore());\n  }\n\n  void _onThemeChanged() {\n    if (mounted) {\n      setState(() {});\n    }\n  }\n\n  @override\n  void dispose() {\n    _themes.removeListener(_onThemeChanged);\n    super.dispose();\n  }\n",
+              1,
+          )
+          app.write_text(s, encoding='utf-8')
+
+          theme = Path('lib/theme/app_theme.dart')
+          t = theme.read_text(encoding='utf-8')
+          start = t.index('class AppThemeSettingButton extends StatelessWidget')
+          replacement = r'''class AppThemeSettingButton extends StatelessWidget {
+            const new({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              final controller = AppThemeController.instance;
+              return AnimatedBuilder(
+                animation: controller,
+                builder: (context, _) {
+                  final palette = controller.palette;
+                  return AppThemePanel(
+                    elevated: false,
+                    alt: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: InkWell(
+                      onTap: () => showAppThemePicker(context),
+                      child: Row(
+                        children: <Widget>[
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: <Color>[palette.primary, palette.accent],
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                palette.geometry == AppThemeGeometry.rounded ? 10 : 1,
+                              ),
+                            ),
+                            child: Icon(
+                              controller.theme.icon,
+                              color: palette.widgetText,
+                              size: 21,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  'Giao diện',
+                                  style: TextStyle(
+                                    color: palette.textPrimary,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  controller.theme.label,
+                                  style: TextStyle(
+                                    color: palette.textSecondary,
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded, color: palette.textSecondary),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            }
+          }
+'''
+          t = t[:start] + replacement
+          theme.write_text(t, encoding='utf-8')
+
+          # Bump patch/build so Package Installer treats this as a real update.
+          pubspec = Path('pubspec.yaml')
+          p = pubspec.read_text(encoding='utf-8')
+          p = re.sub(r'^version:\s*2\.0\.0\+5\s*$', 'version: 2.0.1+6', p, count=1, flags=re.M)
+          pubspec.write_text(p, encoding='utf-8')
+
+          # ---------- Native widget: themed outer/background surfaces ----------
+          drawables = {
+              'schedule_widget_background_lol.xml': ('#06131A', '#0B343A'),
+              'schedule_widget_background_valorant.xml': ('#0F1923', '#24313B'),
+              'schedule_widget_background_minecraft.xml': ('#3A2B20', '#6B4A2F'),
+              'schedule_widget_background_facebook.xml': ('#FFFFFF', '#E7F3FF'),
+              'schedule_widget_background_shopee.xml': ('#EE4D2D', '#FF6A3D'),
+              'schedule_widget_background_tiktok.xml': ('#111111', '#2A1520'),
+              'schedule_widget_background_ben10.xml': ('#101510', '#1D5F22'),
+              'schedule_widget_background_youtube.xml': ('#181818', '#2B0E14'),
+              'schedule_widget_background_steam.xml': ('#171D25', '#1B3D55'),
+          }
+          drawable_dir = Path('platform/android_widget/app/src/main/res/drawable')
+          for name, (start_color, end_color) in drawables.items():
+              (drawable_dir / name).write_text(f'''<?xml version="1.0" encoding="utf-8"?>\n<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">\n    <gradient\n        android:angle="0"\n        android:startColor="{start_color}"\n        android:endColor="{end_color}" />\n    <corners android:radius="18dp" />\n</shape>\n''', encoding='utf-8')
+
+          # Mask only the tiny lower-right StackView peek area, not the whole widget.
+          layout = Path('platform/android_widget/app/src/main/res/layout/schedule_widget.xml')
+          x = layout.read_text(encoding='utf-8')
+          old_start = x.index('    <!--\n      StackView intentionally keeps several transformed children')
+          old_end = x.index('    <ImageView\n        android:id="@+id/widget_calendar"', old_start)
+          mask = r'''    <!-- Only cover the tiny native StackView rear-card peek area. -->
+              <ImageView
+                  android:id="@+id/widget_stack_peek_mask"
+                  android:layout_width="28dp"
+                  android:layout_height="24dp"
+                  android:layout_gravity="bottom|end"
+                  android:background="@drawable/schedule_widget_stack_peek_mask"
+                  android:clickable="false"
+                  android:focusable="false"
+                  android:importantForAccessibility="no" />
+
+          '''
+          x = x[:old_start] + mask + x[old_end:]
+          layout.write_text(x, encoding='utf-8')
+
+          # Keep 2.0 aligned with the 1.0 cross-launcher full-row metadata repair.
+          info = Path('platform/android_widget/app/src/main/res/xml/schedule_widget_info.xml')
+          i = info.read_text(encoding='utf-8')
+          if 'android:targetCellWidth=' not in i:
+              i = i.replace('    android:resizeMode="horizontal"\n', '    android:resizeMode="horizontal"\n    android:targetCellWidth="6"\n', 1)
+          info.write_text(i, encoding='utf-8')
+
+          # ---------- Provider: theme root, avoid resetting StackView on every refresh ----------
+          provider = Path('platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt')
+          k = provider.read_text(encoding='utf-8')
+
+          # renderWidget: read reset flag, pass through, and clear only after applying views.
+          k = k.replace(
+              '        val options = appWidgetManager.getAppWidgetOptions(widgetId)\n\n        val views =',
+              '''        val options = appWidgetManager.getAppWidgetOptions(widgetId)\n        val selectionPrefs = context.getSharedPreferences(\n            WIDGET_SELECTION_PREFS,\n            Context.MODE_PRIVATE,\n        )\n        val resetPosition = selectionPrefs.getBoolean(resetPositionKey(widgetId), false)\n\n        val views =''',
+              1,
+          )
+          k = k.replace(
+              '                        visualHeightDp = size.height,\n                    )',
+              '                        visualHeightDp = size.height,\n                        resetPosition = resetPosition,\n                    )',
+          )
+          k = k.replace(
+              '                    visualHeightDp = fallback.height,\n                )',
+              '                    visualHeightDp = fallback.height,\n                    resetPosition = resetPosition,\n                )',
+          )
+          # The previous replace hits both fallback branches after formatting-normalized text.
+          k = k.replace(
+              '        appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)\n',
+              '''        appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)\n        if (resetPosition) {\n            selectionPrefs.edit().remove(resetPositionKey(widgetId)).apply()\n        }\n''',
+              1,
+          )
+          k = k.replace(
+              '        visualHeightDp: Float,\n    ): RemoteViews {',
+              '        visualHeightDp: Float,\n        resetPosition: Boolean,\n    ): RemoteViews {',
+              1,
+          )
+
+          # Small proportional mask dimensions on Android 12+.
+          calendar_padding_marker = '''            views.setViewPadding(\n                R.id.widget_calendar,\n                calendarPaddingPx,\n                calendarPaddingPx,\n                calendarPaddingPx,\n                calendarPaddingPx,\n            )\n'''
+          mask_size = calendar_padding_marker + '''\n            views.setViewLayoutWidth(\n                R.id.widget_stack_peek_mask,\n                (widthDp * STACK_PEEK_MASK_WIDTH_FRACTION).coerceAtLeast(1f),\n                TypedValue.COMPLEX_UNIT_DIP,\n            )\n            views.setViewLayoutHeight(\n                R.id.widget_stack_peek_mask,\n                (heightDp * STACK_PEEK_MASK_HEIGHT_FRACTION).coerceAtLeast(1f),\n                TypedValue.COMPLEX_UNIT_DIP,\n            )\n'''
+          if calendar_padding_marker not in k:
+              raise SystemExit('calendar padding marker missing')
+          k = k.replace(calendar_padding_marker, mask_size, 1)
+
+          # Move theme read before service URI and make theme part of adapter identity.
+          old_block = '''        val sizeToken = String.format(\n            Locale.US,\n            "%.1fx%.1f",\n            widthDp,\n            heightDp,\n        )\n        val serviceIntent = Intent(context, ScheduleWidgetService::class.java).apply {\n            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)\n            putExtra(EXTRA_RENDER_WIDTH_DP, renderWidthDp)\n            putExtra(EXTRA_RENDER_HEIGHT_DP, renderHeightDp)\n            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken")\n        }\n        val themeKey = context\n            .getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)\n            .getString("flutter.appTheme", "classic")\n            ?: "classic"\n        val themeEndColor = when (themeKey) {\n            "lol" -> 0xFF0B343A.toInt()\n            "valorant" -> 0xFF24313B.toInt()\n            "minecraft" -> 0xFF6B4A2F.toInt()\n            "facebook" -> 0xFFE7F3FF.toInt()\n            "shopee" -> 0xFFFF6A3D.toInt()\n            "tiktok" -> 0xFF2A1520.toInt()\n            "ben10" -> 0xFF1D5F22.toInt()\n            "youtube" -> 0xFF2B0E14.toInt()\n            "steam" -> 0xFF1B3D55.toInt()\n            else -> 0xFF315AB5.toInt()\n        }\n        val iconColor = if (themeKey == "facebook") 0xFF0866FF.toInt() else 0xFFFFFFFF.toInt()\n        views.setInt(R.id.widget_stack_peek_mask, "setBackgroundColor", themeEndColor)\n        views.setInt(R.id.widget_calendar, "setColorFilter", iconColor)\n'''
+          new_block = '''        val themeKey = context\n            .getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)\n            .getString("flutter.appTheme", "classic")\n            ?: "classic"\n        val themeBackground = when (themeKey) {\n            "lol" -> R.drawable.schedule_widget_background_lol\n            "valorant" -> R.drawable.schedule_widget_background_valorant\n            "minecraft" -> R.drawable.schedule_widget_background_minecraft\n            "facebook" -> R.drawable.schedule_widget_background_facebook\n            "shopee" -> R.drawable.schedule_widget_background_shopee\n            "tiktok" -> R.drawable.schedule_widget_background_tiktok\n            "ben10" -> R.drawable.schedule_widget_background_ben10\n            "youtube" -> R.drawable.schedule_widget_background_youtube\n            "steam" -> R.drawable.schedule_widget_background_steam\n            else -> R.drawable.schedule_widget_background\n        }\n        val themeEndColor = when (themeKey) {\n            "lol" -> 0xFF0B343A.toInt()\n            "valorant" -> 0xFF24313B.toInt()\n            "minecraft" -> 0xFF6B4A2F.toInt()\n            "facebook" -> 0xFFE7F3FF.toInt()\n            "shopee" -> 0xFFFF6A3D.toInt()\n            "tiktok" -> 0xFF2A1520.toInt()\n            "ben10" -> 0xFF1D5F22.toInt()\n            "youtube" -> 0xFF2B0E14.toInt()\n            "steam" -> 0xFF1B3D55.toInt()\n            else -> 0xFF315AB5.toInt()\n        }\n        val themeTextColor = if (themeKey == "facebook") 0xFF050505.toInt() else 0xFFFFFFFF.toInt()\n        val iconColor = when (themeKey) {\n            "facebook" -> 0xFF0866FF.toInt()\n            "lol" -> 0xFFC8AA6E.toInt()\n            "tiktok" -> 0xFF25F4EE.toInt()\n            "ben10" -> 0xFF7CFF00.toInt()\n            "steam" -> 0xFF66C0F4.toInt()\n            else -> 0xFFFFFFFF.toInt()\n        }\n        val sizeToken = String.format(\n            Locale.US,\n            "%.1fx%.1f",\n            widthDp,\n            heightDp,\n        )\n        val serviceIntent = Intent(context, ScheduleWidgetService::class.java).apply {\n            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)\n            putExtra(EXTRA_RENDER_WIDTH_DP, renderWidthDp)\n            putExtra(EXTRA_RENDER_HEIGHT_DP, renderHeightDp)\n            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken/$themeKey")\n        }\n        views.setInt(R.id.widget_root, "setBackgroundResource", themeBackground)\n        views.setInt(R.id.widget_stack_peek_mask, "setBackgroundColor", themeEndColor)\n        views.setInt(R.id.widget_calendar, "setColorFilter", iconColor)\n        views.setTextColor(R.id.widget_empty, themeTextColor)\n'''
+          if old_block not in k:
+              raise SystemExit('provider theme block missing')
+          k = k.replace(old_block, new_block, 1)
+
+          k = k.replace(
+              '''        // The selected day (today by default) remains the first item whenever the\n        // provider refreshes. Ordinary StackView swipes continue to loop normally.\n        views.setDisplayedChild(R.id.widget_list, 0)\n        return views\n''',
+              '''        // Do not force the StackView back to index zero on every theme/data refresh.\n        // Doing so while the launcher is settling a swipe can leave the front child\n        // visually translated and make subsequent swipes appear stuck. Only a real\n        // date-selection change requests a reset.\n        if (resetPosition) {\n            views.setDisplayedChild(R.id.widget_list, 0)\n        }\n        return views\n''',
+              1,
+          )
+          k = k.replace(
+              '        fun selectedDateKey(widgetId: Int): String = "selected_date_$widgetId"\n',
+              '        fun selectedDateKey(widgetId: Int): String = "selected_date_$widgetId"\n        fun resetPositionKey(widgetId: Int): String = "reset_position_$widgetId"\n',
+              1,
+          )
+          k = k.replace(
+              '        private const val CALENDAR_PADDING_FRACTION = 0.19f\n',
+              '        private const val CALENDAR_PADDING_FRACTION = 0.19f\n        private const val STACK_PEEK_MASK_WIDTH_FRACTION = 0.11f\n        private const val STACK_PEEK_MASK_HEIGHT_FRACTION = 0.40f\n',
+              1,
+          )
+          provider.write_text(k, encoding='utf-8')
+
+          # Date picker explicitly requests index zero only when changing selected day.
+          picker = Path('platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/WidgetDatePickerActivity.kt')
+          d = picker.read_text(encoding='utf-8')
+          old = '''        getSharedPreferences(\n            ScheduleWidgetProvider.WIDGET_SELECTION_PREFS,\n            MODE_PRIVATE,\n        ).edit()\n            .putString(ScheduleWidgetProvider.selectedDateKey(widgetId), date)\n            .apply()\n'''
+          new = '''        getSharedPreferences(\n            ScheduleWidgetProvider.WIDGET_SELECTION_PREFS,\n            MODE_PRIVATE,\n        ).edit()\n            .putString(ScheduleWidgetProvider.selectedDateKey(widgetId), date)\n            .putBoolean(ScheduleWidgetProvider.resetPositionKey(widgetId), true)\n            .apply()\n'''
+          if old not in d:
+              raise SystemExit('date picker preference marker missing')
+          picker.write_text(d.replace(old, new, 1), encoding='utf-8')
+
+          # ---------- Service: every adapter item gets the selected theme background ----------
+          service = Path('platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetService.kt')
+          q = service.read_text(encoding='utf-8')
+          q = q.replace(
+              '''        views.setImageViewBitmap(\n            R.id.widget_slide_image,\n            renderSlide(item),\n        )\n''',
+              '''        val theme = readWidgetTheme(context)\n        views.setInt(R.id.widget_slide_item, "setBackgroundResource", theme.backgroundRes)\n        views.setImageViewBitmap(\n            R.id.widget_slide_image,\n            renderSlide(item, theme),\n        )\n''',
+              1,
+          )
+          q = q.replace(
+              '    private fun renderSlide(item: WidgetClass): Bitmap {',
+              '    private fun renderSlide(item: WidgetClass, theme: WidgetTheme): Bitmap {',
+              1,
+          )
+          q = q.replace('        val theme = readWidgetTheme(context)\n        val backgroundPaint', '        val backgroundPaint', 1)
+          q = q.replace(
+              '            textSize = heightPx * SUBJECT_TEXT_HEIGHT_FRACTION\n',
+              '            textSize = heightPx * SUBJECT_TEXT_HEIGHT_FRACTION * theme.fontScale\n',
+              1,
+          )
+          q = q.replace(
+              '            textSize = heightPx * DETAIL_TEXT_HEIGHT_FRACTION\n',
+              '            textSize = heightPx * DETAIL_TEXT_HEIGHT_FRACTION * theme.fontScale\n',
+              1,
+          )
+          q = q.replace(
+              '''            val fitScale = (titleMaxWidth / naturalTitleWidth)\n                .coerceAtLeast(MIN_SUBJECT_FIT_SCALE)\n''',
+              '''            val fitScale = (titleMaxWidth / naturalTitleWidth)\n                .coerceAtLeast(theme.minSubjectFitScale)\n''',
+              1,
+          )
+
+          start = q.index('private data class WidgetTheme(')
+          end = q.index('private fun themedTypeface', start)
+          themed = r'''private data class WidgetTheme(
+              val key: String,
+              val startColor: Int,
+              val endColor: Int,
+              val textColor: Int,
+              val subtextColor: Int,
+              val backgroundRes: Int,
+              val fontScale: Float = 1f,
+              val minSubjectFitScale: Float = MIN_SUBJECT_FIT_SCALE,
+          )
+
+          private fun readWidgetTheme(context: Context): WidgetTheme {
+              val key = context
+                  .getSharedPreferences(SNAPSHOT_PREFS, Context.MODE_PRIVATE)
+                  .getString(THEME_KEY, "classic")
+                  ?: "classic"
+              return when (key) {
+                  "lol" -> WidgetTheme(key, 0xFF06131A.toInt(), 0xFF0B343A.toInt(), 0xFFF0E6D2.toInt(), 0xFFC8AA6E.toInt(), R.drawable.schedule_widget_background_lol)
+                  "valorant" -> WidgetTheme(key, 0xFF0F1923.toInt(), 0xFF24313B.toInt(), 0xFFECE8E1.toInt(), 0xFFFF7B86.toInt(), R.drawable.schedule_widget_background_valorant)
+                  "minecraft" -> WidgetTheme(key, 0xFF3A2B20.toInt(), 0xFF6B4A2F.toInt(), 0xFFFFFFFF.toInt(), 0xFFD8D1C9.toInt(), R.drawable.schedule_widget_background_minecraft, fontScale = 0.84f, minSubjectFitScale = 0.62f)
+                  "facebook" -> WidgetTheme(key, 0xFFFFFFFF.toInt(), 0xFFE7F3FF.toInt(), 0xFF050505.toInt(), 0xFF65676B.toInt(), R.drawable.schedule_widget_background_facebook)
+                  "shopee" -> WidgetTheme(key, 0xFFEE4D2D.toInt(), 0xFFFF6A3D.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFE9E1.toInt(), R.drawable.schedule_widget_background_shopee)
+                  "tiktok" -> WidgetTheme(key, 0xFF111111.toInt(), 0xFF2A1520.toInt(), 0xFFFFFFFF.toInt(), 0xFF25F4EE.toInt(), R.drawable.schedule_widget_background_tiktok)
+                  "ben10" -> WidgetTheme(key, 0xFF101510.toInt(), 0xFF1D5F22.toInt(), 0xFFFFFFFF.toInt(), 0xFF7CFF00.toInt(), R.drawable.schedule_widget_background_ben10)
+                  "youtube" -> WidgetTheme(key, 0xFF181818.toInt(), 0xFF2B0E14.toInt(), 0xFFFFFFFF.toInt(), 0xFFFF8A9F.toInt(), R.drawable.schedule_widget_background_youtube)
+                  "steam" -> WidgetTheme(key, 0xFF171D25.toInt(), 0xFF1B3D55.toInt(), 0xFFD6E9F8.toInt(), 0xFF66C0F4.toInt(), R.drawable.schedule_widget_background_steam)
+                  else -> WidgetTheme("classic", 0xFF173A8E.toInt(), 0xFF315AB5.toInt(), 0xFFFFFFFF.toInt(), 0xFFDDE8FF.toInt(), R.drawable.schedule_widget_background)
+              }
+          }
+
+          '''
+          q = q[:start] + themed + q[end:]
+          service.write_text(q, encoding='utf-8')
+          PY
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter 3.47.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Bootstrap Android
+        run: bash tool/bootstrap.sh
+
+      - name: Format
+        run: dart format lib test
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Verify repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '_themes.addListener(_onThemeChanged)' lib/app/app.dart
+          grep -q 'animation: controller' lib/theme/app_theme.dart
+          grep -q '^version: 2.0.1+6$' pubspec.yaml
+          grep -q 'android:targetCellWidth="6"' platform/android_widget/app/src/main/res/xml/schedule_widget_info.xml
+          grep -q 'resetPositionKey' platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt
+          grep -q 'if (resetPosition)' platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt
+          grep -q '/$themeKey' platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt
+          grep -q 'schedule_widget_background_minecraft' platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetService.kt
+          grep -q 'fontScale = 0.84f' platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetService.kt
+          test -f platform/android_widget/app/src/main/res/drawable/schedule_widget_background_lol.xml
+          test -f platform/android_widget/app/src/main/res/drawable/schedule_widget_background_steam.xml
+          grep -q 'qldtbeta.phenikaa-uni.edu.vn' lib/features/qldt_intake/qldt_login_mobile.dart
+          grep -q 'edu.system.makeRequest' lib/features/qldt_intake/qldt_login_mobile.dart
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Commit repaired source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'cooc'
+          git config user.email 'minhdaonguyenad@gmail.com'
+          git add lib pubspec.yaml platform/android_widget
+          git commit -m 'fix: synchronize themes and stabilize themed widget'
+          git push origin HEAD:main
+
+      - name: Package APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/Better_Phenikaa_App_v2.0.1.apk
+          sha256sum dist/Better_Phenikaa_App_v2.0.1.apk > dist/Better_Phenikaa_App_v2.0.1.sha256
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Better-Phenikaa-App-v2.0.1-ui-widget-fix
+          path: |
+            dist/Better_Phenikaa_App_v2.0.1.apk
+            dist/Better_Phenikaa_App_v2.0.1.sha256
+          retention-days: 30
+          if-no-files-found: error
