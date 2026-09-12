@@ -124,7 +124,10 @@ new_select = '''  Future<void> select(AppThemeId value) async {
     );
   }
 '''
-t = replace_once(t, old_select, new_select, "theme selection sync")
+if old_select in t:
+    t = t.replace(old_select, new_select, 1)
+elif "Future.wait<bool>" not in t:
+    raise RuntimeError("missing marker: theme selection sync")
 theme_path.write_text(t, encoding="utf-8")
 
 # 2 + 3) Keep the RemoteViews adapter identity stable across theme changes.
@@ -134,12 +137,12 @@ provider_path = Path(
     "platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt"
 )
 p = provider_path.read_text(encoding="utf-8")
-p = replace_once(
-    p,
-    '            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken/${theme.key}")\n',
-    '            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken")\n',
-    "stable widget adapter uri",
-)
+old_uri = '            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken/${theme.key}")\n'
+new_uri = '            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken")\n'
+if old_uri in p:
+    p = p.replace(old_uri, new_uri, 1)
+elif new_uri not in p:
+    raise RuntimeError("missing marker: stable widget adapter uri")
 provider_path.write_text(p, encoding="utf-8")
 
 # Remove the last classic-blue native background from each StackView item.
@@ -147,24 +150,27 @@ provider_path.write_text(p, encoding="utf-8")
 # old drawable underneath exposed a 1px/edge strip during StackView transforms.
 item_path = Path("platform/android_widget/app/src/main/res/layout/schedule_widget_item.xml")
 x = item_path.read_text(encoding="utf-8")
-x = replace_once(
-    x,
-    '    android:background="@drawable/schedule_widget_background"\n',
-    '    android:background="@android:color/transparent"\n',
-    "item background",
-)
-x = replace_once(
-    x,
-    '    android:outlineProvider="background">\n',
-    '    android:outlineProvider="none">\n',
-    "item outline",
-)
+old_bg = '    android:background="@drawable/schedule_widget_background"\n'
+new_bg = '    android:background="@android:color/transparent"\n'
+if old_bg in x:
+    x = x.replace(old_bg, new_bg, 1)
+elif new_bg not in x:
+    raise RuntimeError("missing marker: item background")
+if '    android:outlineProvider="background">\n' in x:
+    x = x.replace(
+        '    android:outlineProvider="background">\n',
+        '    android:outlineProvider="none">\n',
+        1,
+    )
+elif '    android:outlineProvider="none">\n' not in x:
+    raise RuntimeError("missing marker: item outline")
 item_path.write_text(x, encoding="utf-8")
 
 # Release bump.
 pubspec_path = Path("pubspec.yaml")
 s = pubspec_path.read_text(encoding="utf-8")
-s2 = re.sub(r"^version:\s*2\.0\.2\+7\s*$", "version: 2.0.3+8", s, count=1, flags=re.M)
-if s2 == s:
+if re.search(r"^version:\s*2\.0\.2\+7\s*$", s, flags=re.M):
+    s = re.sub(r"^version:\s*2\.0\.2\+7\s*$", "version: 2.0.3+8", s, count=1, flags=re.M)
+elif not re.search(r"^version:\s*2\.0\.3\+8\s*$", s, flags=re.M):
     raise RuntimeError("version marker missing")
-pubspec_path.write_text(s2, encoding="utf-8")
+pubspec_path.write_text(s, encoding="utf-8")
