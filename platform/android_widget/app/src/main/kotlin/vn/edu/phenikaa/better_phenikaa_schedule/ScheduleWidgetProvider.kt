@@ -13,8 +13,11 @@ import android.graphics.Shader
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.SizeF
 import android.util.TypedValue
+import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetProvider
 import java.util.Locale
@@ -59,6 +62,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         val themeKey = readThemeColors(context).key
         val previousThemeKey = renderStatePrefs.getString(themeTokenKey(widgetId), null)
         val themeChanged = previousThemeKey != themeKey
+        val showRefreshCover = collectionChanged || themeChanged
 
         val views = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val exactSizes = exactWidgetSizes(options)
@@ -71,6 +75,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                         visualWidthDp = size.width,
                         visualHeightDp = size.height,
                         bindCollection = collectionChanged,
+                        showRefreshCover = showRefreshCover,
                     )
                 }
                 RemoteViews(sizedViews)
@@ -82,6 +87,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                     visualWidthDp = fallback.width,
                     visualHeightDp = fallback.height,
                     bindCollection = collectionChanged,
+                    showRefreshCover = showRefreshCover,
                 )
             }
         } else {
@@ -92,6 +98,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 visualWidthDp = fallback.width,
                 visualHeightDp = fallback.height,
                 bindCollection = collectionChanged,
+                showRefreshCover = showRefreshCover,
             )
         }
 
@@ -102,6 +109,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 .putString(contentTokenKey(widgetId), contentToken)
                 .putString(themeTokenKey(widgetId), themeKey)
                 .apply()
+            scheduleRefreshCoverHide(context, appWidgetManager, widgetId)
         } else if (themeChanged) {
             // Keep the adapter identity stable. Repaint its existing children in place;
             // their opaque backgrounds prevent any neighbouring item from showing
@@ -109,6 +117,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             appWidgetManager.partiallyUpdateAppWidget(widgetId, views)
             appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
             renderStatePrefs.edit().putString(themeTokenKey(widgetId), themeKey).apply()
+            scheduleRefreshCoverHide(context, appWidgetManager, widgetId)
         } else {
             appWidgetManager.partiallyUpdateAppWidget(widgetId, views)
         }
@@ -120,6 +129,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         visualWidthDp: Float,
         visualHeightDp: Float,
         bindCollection: Boolean,
+        showRefreshCover: Boolean,
     ): RemoteViews {
         val widthDp = visualWidthDp.coerceAtLeast(1f)
         val heightDp = visualHeightDp.coerceAtLeast(1f)
@@ -175,6 +185,24 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         views.setInt(R.id.widget_calendar, "setColorFilter", theme.iconColor)
         views.setTextColor(R.id.widget_empty, theme.textColor)
 
+        if (showRefreshCover) {
+            val cover = renderWidgetRefreshCover(
+                context,
+                widgetId,
+                renderWidthDp,
+                renderHeightDp,
+            )
+            if (cover != null) {
+                views.setImageViewBitmap(R.id.widget_refresh_cover, cover)
+                views.setViewVisibility(R.id.widget_refresh_cover, View.VISIBLE)
+                views.setDisplayedChild(R.id.widget_list, 0)
+            } else {
+                views.setViewVisibility(R.id.widget_refresh_cover, View.GONE)
+            }
+        } else {
+            views.setViewVisibility(R.id.widget_refresh_cover, View.GONE)
+        }
+
         if (bindCollection) {
             val sizeToken = String.format(
                 Locale.US,
@@ -227,6 +255,18 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             }
         }
         return views
+    }
+
+    private fun scheduleRefreshCoverHide(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        widgetId: Int,
+    ) {
+        Handler(Looper.getMainLooper()).postDelayed({
+            val reveal = RemoteViews(context.packageName, R.layout.schedule_widget)
+            reveal.setViewVisibility(R.id.widget_refresh_cover, View.GONE)
+            appWidgetManager.partiallyUpdateAppWidget(widgetId, reveal)
+        }, REFRESH_COVER_HOLD_MS)
     }
 
     private data class ThemeColors(
@@ -358,6 +398,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
 
         private const val DATE_PICKER_REQUEST_CODE_BASE = 100_000
         private const val MAX_EXACT_LAYOUTS = 16
+        private const val REFRESH_COVER_HOLD_MS = 1250L
         private const val CALENDAR_HEIGHT_FRACTION = 0.42f
         private const val CALENDAR_WIDTH_FRACTION = 0.085f
         private const val CALENDAR_PADDING_FRACTION = 0.19f

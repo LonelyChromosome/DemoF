@@ -125,7 +125,18 @@ private class ScheduleWidgetFactory(
         items = readWidgetClasses(context, widgetId)
     }
 
-    private fun renderSlide(item: WidgetClass): Bitmap {
+    private fun renderSlide(item: WidgetClass): Bitmap =
+        renderWidgetSlide(context, item, renderWidthDp, renderHeightDp)
+
+}
+
+
+private fun renderWidgetSlide(
+    context: Context,
+    item: WidgetClass,
+    renderWidthDp: Int,
+    renderHeightDp: Int,
+): Bitmap {
         val density = context.resources.displayMetrics.density
         val widthDp = renderWidthDp.coerceAtLeast(1)
         val heightDp = renderHeightDp.coerceAtLeast(1)
@@ -230,7 +241,17 @@ private class ScheduleWidgetFactory(
         }
 
         return horizontal
-    }
+    
+}
+
+internal fun renderWidgetRefreshCover(
+    context: Context,
+    widgetId: Int,
+    renderWidthDp: Int,
+    renderHeightDp: Int,
+): Bitmap? {
+    val first = readWidgetClasses(context, widgetId).firstOrNull() ?: return null
+    return renderWidgetSlide(context, first, renderWidthDp, renderHeightDp)
 }
 
 private data class WidgetTheme(

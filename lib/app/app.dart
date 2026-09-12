@@ -1692,15 +1692,35 @@ class _PanelAction extends StatelessWidget {
   }
 }
 
-Color _panelSecondaryColor(AppThemePalette palette) =>
-    Color.lerp(palette.primary, palette.accent, .34) ?? palette.primary;
+Color _panelSecondaryColor(AppThemePalette palette) => switch (palette.id) {
+  AppThemeId.classic => const Color(0xFF6A7CEB),
+  AppThemeId.lol => const Color(0xFFC89B3C),
+  AppThemeId.valorant => const Color(0xFF56D6C7),
+  AppThemeId.minecraft => const Color(0xFF42A5F5),
+  AppThemeId.facebook => const Color(0xFF42B72A),
+  AppThemeId.shopee => const Color(0xFF0EA5E9),
+  AppThemeId.tiktok => const Color(0xFF25F4EE),
+  AppThemeId.ben10 => const Color(0xFF00AEEF),
+  AppThemeId.youtube => const Color(0xFF3EA6FF),
+  AppThemeId.steam => const Color(0xFFA4D007),
+};
 
-Color _panelTertiaryColor(AppThemePalette palette) =>
-    Color.lerp(palette.primary, palette.accent, .68) ?? palette.primary;
+Color _panelTertiaryColor(AppThemePalette palette) => switch (palette.id) {
+  AppThemeId.classic => const Color(0xFF8B5CF6),
+  AppThemeId.lol => const Color(0xFF7E72C6),
+  AppThemeId.valorant => const Color(0xFFC084FC),
+  AppThemeId.minecraft => const Color(0xFFFFCA28),
+  AppThemeId.facebook => const Color(0xFFA033FF),
+  AppThemeId.shopee => const Color(0xFF8B5CF6),
+  AppThemeId.tiktok => const Color(0xFFB06CFF),
+  AppThemeId.ben10 => const Color(0xFFC5FF35),
+  AppThemeId.youtube => const Color(0xFF8B5CF6),
+  AppThemeId.steam => const Color(0xFF66C0F4),
+};
 
 Color _contrastForeground(Color background) =>
-    background.computeLuminance() > .52
-    ? const Color(0xFF151515)
+    background.computeLuminance() > .48
+    ? const Color(0xFF101418)
     : Colors.white;
 
 class _MetaLine extends StatelessWidget {
