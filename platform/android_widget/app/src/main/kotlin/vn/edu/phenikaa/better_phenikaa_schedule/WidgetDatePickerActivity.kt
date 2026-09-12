@@ -308,6 +308,7 @@ class WidgetDatePickerActivity : Activity() {
             MODE_PRIVATE,
         ).edit()
             .putString(ScheduleWidgetProvider.selectedDateKey(widgetId), date)
+            .putBoolean(ScheduleWidgetProvider.resetChildKey(widgetId), true)
             .apply()
         refreshWidget(widgetId)
         finish()

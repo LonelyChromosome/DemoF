@@ -5,6 +5,11 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -137,7 +142,26 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 calendarPaddingPx,
                 calendarPaddingPx,
             )
+            views.setViewLayoutWidth(
+                R.id.widget_stack_peek_mask,
+                widthDp * STACK_MASK_WIDTH_FRACTION,
+                TypedValue.COMPLEX_UNIT_DIP,
+            )
+            views.setViewLayoutHeight(
+                R.id.widget_stack_peek_mask,
+                heightDp * STACK_MASK_HEIGHT_FRACTION,
+                TypedValue.COMPLEX_UNIT_DIP,
+            )
         }
+
+        val theme = readThemeColors(context)
+        views.setImageViewBitmap(
+            R.id.widget_theme_background,
+            renderThemeBackground(context, renderWidthDp, renderHeightDp, theme),
+        )
+        views.setInt(R.id.widget_stack_peek_mask, "setBackgroundColor", theme.endColor)
+        views.setInt(R.id.widget_calendar, "setColorFilter", theme.iconColor)
+        views.setTextColor(R.id.widget_empty, theme.textColor)
 
         val sizeToken = String.format(
             Locale.US,
@@ -149,27 +173,8 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
             putExtra(EXTRA_RENDER_WIDTH_DP, renderWidthDp)
             putExtra(EXTRA_RENDER_HEIGHT_DP, renderHeightDp)
-            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken")
+            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken/${theme.key}")
         }
-        val themeKey = context
-            .getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-            .getString("flutter.appTheme", "classic")
-            ?: "classic"
-        val themeEndColor = when (themeKey) {
-            "lol" -> 0xFF0B343A.toInt()
-            "valorant" -> 0xFF24313B.toInt()
-            "minecraft" -> 0xFF6B4A2F.toInt()
-            "facebook" -> 0xFFE7F3FF.toInt()
-            "shopee" -> 0xFFFF6A3D.toInt()
-            "tiktok" -> 0xFF2A1520.toInt()
-            "ben10" -> 0xFF1D5F22.toInt()
-            "youtube" -> 0xFF2B0E14.toInt()
-            "steam" -> 0xFF1B3D55.toInt()
-            else -> 0xFF315AB5.toInt()
-        }
-        val iconColor = if (themeKey == "facebook") 0xFF0866FF.toInt() else 0xFFFFFFFF.toInt()
-        views.setInt(R.id.widget_stack_peek_mask, "setBackgroundColor", themeEndColor)
-        views.setInt(R.id.widget_calendar, "setColorFilter", iconColor)
         views.setRemoteAdapter(R.id.widget_list, serviceIntent)
         views.setEmptyView(R.id.widget_list, R.id.widget_empty)
 
@@ -197,10 +202,67 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_calendar, chooseDate)
 
-        // The selected day (today by default) remains the first item whenever the
-        // provider refreshes. Ordinary StackView swipes continue to loop normally.
-        views.setDisplayedChild(R.id.widget_list, 0)
+        val selectionPrefs = context.getSharedPreferences(
+            WIDGET_SELECTION_PREFS,
+            Context.MODE_PRIVATE,
+        )
+        if (selectionPrefs.getBoolean(resetChildKey(widgetId), false)) {
+            views.setDisplayedChild(R.id.widget_list, 0)
+            selectionPrefs.edit().remove(resetChildKey(widgetId)).apply()
+        }
         return views
+    }
+
+    private data class ThemeColors(
+        val key: String,
+        val startColor: Int,
+        val endColor: Int,
+        val textColor: Int,
+        val iconColor: Int,
+    )
+
+    private fun readThemeColors(context: Context): ThemeColors {
+        val key = context
+            .getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            .getString("flutter.appTheme", "classic")
+            ?: "classic"
+        return when (key) {
+            "lol" -> ThemeColors(key, 0xFF06131A.toInt(), 0xFF0B343A.toInt(), 0xFFF0E6D2.toInt(), 0xFFF0E6D2.toInt())
+            "valorant" -> ThemeColors(key, 0xFF0F1923.toInt(), 0xFF24313B.toInt(), 0xFFECE8E1.toInt(), 0xFFECE8E1.toInt())
+            "minecraft" -> ThemeColors(key, 0xFF3A2B20.toInt(), 0xFF6B4A2F.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
+            "facebook" -> ThemeColors(key, 0xFFFFFFFF.toInt(), 0xFFE7F3FF.toInt(), 0xFF050505.toInt(), 0xFF0866FF.toInt())
+            "shopee" -> ThemeColors(key, 0xFFEE4D2D.toInt(), 0xFFFF6A3D.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
+            "tiktok" -> ThemeColors(key, 0xFF111111.toInt(), 0xFF2A1520.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
+            "ben10" -> ThemeColors(key, 0xFF101510.toInt(), 0xFF1D5F22.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
+            "youtube" -> ThemeColors(key, 0xFF181818.toInt(), 0xFF2B0E14.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
+            "steam" -> ThemeColors(key, 0xFF171D25.toInt(), 0xFF1B3D55.toInt(), 0xFFD6E9F8.toInt(), 0xFFD6E9F8.toInt())
+            else -> ThemeColors("classic", 0xFF173A8E.toInt(), 0xFF315AB5.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
+        }
+    }
+
+    private fun renderThemeBackground(
+        context: Context,
+        widthDp: Int,
+        heightDp: Int,
+        theme: ThemeColors,
+    ): Bitmap {
+        val density = context.resources.displayMetrics.density
+        val width = (widthDp.coerceAtLeast(1) * density).roundToInt().coerceAtLeast(1)
+        val height = (heightDp.coerceAtLeast(1) * density).roundToInt().coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(
+                0f,
+                0f,
+                width.toFloat(),
+                0f,
+                theme.startColor,
+                theme.endColor,
+                Shader.TileMode.CLAMP,
+            )
+        }
+        Canvas(bitmap).drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        return bitmap
     }
 
     @Suppress("DEPRECATION")
@@ -250,12 +312,15 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         const val WIDGET_SELECTION_PREFS = "better_phenikaa_widget_selection"
 
         fun selectedDateKey(widgetId: Int): String = "selected_date_$widgetId"
+        fun resetChildKey(widgetId: Int): String = "reset_child_$widgetId"
 
         private const val DATE_PICKER_REQUEST_CODE_BASE = 100_000
         private const val MAX_EXACT_LAYOUTS = 16
         private const val CALENDAR_HEIGHT_FRACTION = 0.42f
         private const val CALENDAR_WIDTH_FRACTION = 0.085f
         private const val CALENDAR_PADDING_FRACTION = 0.19f
+        private const val STACK_MASK_WIDTH_FRACTION = 0.11f
+        private const val STACK_MASK_HEIGHT_FRACTION = 0.40f
         private const val DEFAULT_WIDGET_WIDTH_DP = 320
         private const val DEFAULT_WIDGET_HEIGHT_DP = 64
     }

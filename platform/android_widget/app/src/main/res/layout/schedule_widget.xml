@@ -9,12 +9,15 @@
     android:clipToPadding="true"
     android:outlineProvider="background">
 
-    <!--
-      Use StackView in its native vertical direction. A rotated StackView makes a
-      horizontal gesture compete with the launcher's home-screen page gesture.
-      Native vertical swiping keeps collection gestures inside the widget while
-      preserving the same stacked-card behaviour and data source.
-    -->
+    <ImageView
+        android:id="@+id/widget_theme_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:contentDescription="@null"
+        android:focusable="false"
+        android:scaleType="fitXY" />
+
     <StackView
         android:id="@+id/widget_list"
         android:layout_width="match_parent"
@@ -38,51 +41,14 @@
         android:textSize="14sp"
         android:textStyle="bold" />
 
-    <!--
-      StackView intentionally keeps several transformed children behind the front
-      card. Some launchers expose a tiny piece of those rear layers at the lower
-      right edge. This percentage-based overlay restores the original gradient only
-      in that peek area, so visually exactly one card remains while native swiping
-      stays unchanged. The root outline clips the mask to the existing rounded card.
-    -->
-    <LinearLayout
-        android:id="@+id/widget_stack_peek_mask_layer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+    <ImageView
+        android:id="@+id/widget_stack_peek_mask"
+        android:layout_width="40dp"
+        android:layout_height="26dp"
+        android:layout_gravity="bottom|end"
         android:clickable="false"
-        android:focusable="false"
-        android:orientation="vertical"
-        android:weightSum="100">
-
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="60" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="40"
-            android:clickable="false"
-            android:focusable="false"
-            android:orientation="horizontal"
-            android:weightSum="100">
-
-            <FrameLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="89" />
-
-            <ImageView
-                android:id="@+id/widget_stack_peek_mask"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="11"
-                android:background="@drawable/schedule_widget_stack_peek_mask"
-                android:clickable="false"
-                android:focusable="false" />
-        </LinearLayout>
-    </LinearLayout>
+        android:contentDescription="@null"
+        android:focusable="false" />
 
     <ImageView
         android:id="@+id/widget_calendar"

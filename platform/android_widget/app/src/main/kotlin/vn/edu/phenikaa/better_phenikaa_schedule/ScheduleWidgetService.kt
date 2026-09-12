@@ -7,7 +7,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.os.Build
@@ -130,13 +129,7 @@ private class ScheduleWidgetFactory(
                 Shader.TileMode.CLAMP,
             )
         }
-        val radius = heightPx * CORNER_RADIUS_HEIGHT_FRACTION
-        canvas.drawRoundRect(
-            RectF(0f, 0f, widthPx, heightPx),
-            radius,
-            radius,
-            backgroundPaint,
-        )
+        canvas.drawRect(0f, 0f, widthPx, heightPx, backgroundPaint)
 
         // Every coordinate is proportional to the real frame supplied by the host.
         // Keep the visual spacing from the approved layout while leaving the far
@@ -147,12 +140,12 @@ private class ScheduleWidgetFactory(
 
         val subjectPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = theme.textColor
-            textSize = heightPx * SUBJECT_TEXT_HEIGHT_FRACTION
+            textSize = heightPx * SUBJECT_TEXT_HEIGHT_FRACTION * if (theme.key == "minecraft") 0.86f else 1f
             typeface = themedTypeface(context, theme, Typeface.BOLD)
         }
         val detailPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = theme.subtextColor
-            textSize = heightPx * DETAIL_TEXT_HEIGHT_FRACTION
+            textSize = heightPx * DETAIL_TEXT_HEIGHT_FRACTION * if (theme.key == "minecraft") 0.84f else 1f
             typeface = themedTypeface(context, theme, Typeface.NORMAL)
         }
 
@@ -178,10 +171,19 @@ private class ScheduleWidgetFactory(
             subjectPaint,
         )
 
-        val timeWidth = detailPaint.measureText(item.time)
+        var timeWidth = detailPaint.measureText(item.time)
+        val availableDetailWidth = (detailRight - left).coerceAtLeast(1f)
+        val minRoomWidth = widthPx * MIN_DETAIL_WIDTH_FRACTION
+        val detailGap = widthPx * DETAIL_GAP_WIDTH_FRACTION
+        if (item.time.isNotBlank() && timeWidth + minRoomWidth + detailGap > availableDetailWidth) {
+            val fitScale = ((availableDetailWidth - minRoomWidth - detailGap) / timeWidth)
+                .coerceIn(MIN_DETAIL_FIT_SCALE, 1f)
+            detailPaint.textSize *= fitScale
+            timeWidth = detailPaint.measureText(item.time)
+        }
         val roomMaxWidth = (
-            detailRight - left - timeWidth - widthPx * DETAIL_GAP_WIDTH_FRACTION
-        ).coerceAtLeast(widthPx * MIN_DETAIL_WIDTH_FRACTION)
+            detailRight - left - timeWidth - detailGap
+        ).coerceAtLeast(minRoomWidth)
         val room = TextUtils.ellipsize(
             item.room,
             detailPaint,
@@ -402,7 +404,6 @@ private const val DATE_TIME_PATTERN = "yyyy-MM-dd'T'HH:mm:ss"
 private const val DEFAULT_WIDGET_WIDTH_DP = 320
 private const val DEFAULT_WIDGET_HEIGHT_DP = 64
 
-private const val CORNER_RADIUS_HEIGHT_FRACTION = 0.28f
 private const val CONTENT_LEFT_FRACTION = 0.095f
 private const val TITLE_RIGHT_FRACTION = 0.86f
 private const val DETAIL_RIGHT_FRACTION = 0.86f
@@ -413,4 +414,5 @@ private const val DETAIL_BASELINE_HEIGHT_FRACTION = 0.77f
 private const val DETAIL_GAP_WIDTH_FRACTION = 0.03f
 private const val MIN_TITLE_WIDTH_FRACTION = 0.30f
 private const val MIN_DETAIL_WIDTH_FRACTION = 0.12f
-private const val MIN_SUBJECT_FIT_SCALE = 0.78f
+private const val MIN_SUBJECT_FIT_SCALE = 0.64f
+private const val MIN_DETAIL_FIT_SCALE = 0.72f

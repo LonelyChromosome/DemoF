@@ -66,7 +66,20 @@ class _AppRootState extends State<_AppRoot> {
   @override
   void initState() {
     super.initState();
+    AppThemeController.instance.addListener(_handleThemeChanged);
     unawaited(_restore());
+  }
+
+  void _handleThemeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    AppThemeController.instance.removeListener(_handleThemeChanged);
+    super.dispose();
   }
 
   Future<void> _restore() async {
