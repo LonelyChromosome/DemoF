@@ -82,11 +82,12 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             )
         }
 
-        // Refresh the existing collection factory before applying the small
-        // native chrome update. With a stable adapter URI this updates the visible
-        // card in-place instead of showing a torn old/new theme frame.
-        appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
+        // Apply the stable outer frame first. The StackView keeps its current child
+        // on screen, then the factory swaps refreshed bitmaps with zero-duration
+        // in/out animators. This avoids Samsung Launcher exposing a transformed
+        // loading/old-theme child for ~1 second while a theme refresh is running.
         appWidgetManager.updateAppWidget(widgetId, views)
+        appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
     }
 
     private fun buildWidgetViews(
@@ -101,9 +102,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         val renderHeightDp = heightDp.roundToInt().coerceAtLeast(1)
         val views = RemoteViews(context.packageName, R.layout.schedule_widget)
 
-        // Use the exact host bounds. Do not enlarge/translate StackView to compensate
-        // for a particular launcher grid: that workaround can push the card outside
-        // its rounded outline on other launchers and produces clipped corners.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             views.setViewLayoutWidth(
                 R.id.widget_list,
@@ -116,9 +114,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 TypedValue.COMPLEX_UNIT_DIP,
             )
 
-            // Keep the calendar action as a small corner control. Its square size and
-            // inner padding are proportional to the actual host frame, so it does not
-            // consume a fixed-width strip on different launcher grids.
             val calendarSizeDp = min(
                 heightDp * CALENDAR_HEIGHT_FRACTION,
                 widthDp * CALENDAR_WIDTH_FRACTION,
@@ -300,9 +295,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             .takeIf { it > 0 }
             ?: minHeight
 
-        // A one-row widget should use all horizontal space the launcher assigned.
-        // Width is therefore taken from the widest host bound, while height stays at
-        // the shortest valid row height. No cell-count assumption is involved.
         return SizeF(
             maxOf(minWidth, maxWidth).toFloat(),
             minOf(minHeight, maxHeight).toFloat(),
