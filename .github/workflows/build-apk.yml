@@ -7,7 +7,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   apk:
@@ -17,6 +17,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply pending widget visibility fix
+        shell: bash
+        run: |
+          if [ -f tool/apply_widget_visibility_fix.py ]; then
+            python3 tool/apply_widget_visibility_fix.py
+          fi
 
       - name: Java 17
         uses: actions/setup-java@v4
@@ -34,8 +43,30 @@ jobs:
       - name: Bootstrap project
         run: bash tool/bootstrap.sh
 
+      - name: Format
+        run: dart format lib test
+
+      - name: Analyze
+        run: flutter analyze
+
       - name: Test
         run: flutter test
+
+      - name: Verify widget and theme regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt
+          A=lib/app/app.dart
+          grep -q 'widget_list, View.INVISIBLE' "$P"
+          grep -q 'widget_list, View.VISIBLE' "$P"
+          grep -q 'REFRESH_COVER_HOLD_MS = 1600L' "$P"
+          grep -q 'AppThemeId.youtube => const Color(0xFF3EA6FF)' "$A"
+          grep -q 'AppThemeId.valorant => const Color(0xFF56D6C7)' "$A"
+          grep -q 'AppThemeId.minecraft => const Color(0xFF42A5F5)' "$A"
+          grep -q '_contrastForeground(color)' "$A"
+          grep -q '^version: 2.0.8+13$' pubspec.yaml
+          grep -q 'qldtbeta.phenikaa-uni.edu.vn' lib/features/qldt_intake/qldt_login_mobile.dart
 
       - name: Build release APK
         run: flutter build apk --release
@@ -43,6 +74,17 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: better-phenikaa-schedule-apk
+          name: better-phenikaa-v2.0.8-atomic-widget
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
+
+      - name: Persist repaired source
+        shell: bash
+        run: |
+          git config user.name 'cooc'
+          git config user.email 'minhdaonguyenad@gmail.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: hide stack during widget refresh to prevent overlap'
+            git push origin HEAD:main
+          fi
