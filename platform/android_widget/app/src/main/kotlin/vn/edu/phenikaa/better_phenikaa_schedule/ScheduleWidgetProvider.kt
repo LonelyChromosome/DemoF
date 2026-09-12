@@ -36,7 +36,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 widgetId != AppWidgetManager.INVALID_APPWIDGET_ID &&
                 readyThemeKey != null
             ) {
-                revealCollectionWhenReady(context, widgetId, readyThemeKey)
+                playRevealTransition(context, widgetId, readyThemeKey)
             }
             return
         }
@@ -202,7 +202,13 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         views.setTextColor(R.id.widget_empty, theme.textColor)
 
         if (showRefreshCover) {
-            val cover = renderWidgetRefreshCover(
+            val cover = renderWidgetTransitionFrame(
+                context,
+                widgetId,
+                renderWidthDp,
+                renderHeightDp,
+                0f,
+            ) ?: renderWidgetRefreshCover(
                 context,
                 widgetId,
                 renderWidthDp,
@@ -277,25 +283,102 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         return views
     }
 
-    private fun revealCollectionWhenReady(
+    private fun playRevealTransition(
         context: Context,
         widgetId: Int,
         readyThemeKey: String,
     ) {
-        // Never reveal a frame that belongs to an older rapid theme change.
+        // The collection service can finish while the app is still covering Home.
+        // Keep the single bitmap cover in front until the launcher has had time to
+        // settle its hidden StackView, then reveal the new card with a deliberate
+        // left-to-right frosted wipe. Stale theme callbacks are ignored.
         if (readyThemeKey != readThemeColors(context).key) {
             return
         }
+        val manager = AppWidgetManager.getInstance(context)
+        val options = manager.getAppWidgetOptions(widgetId)
+        val size = legacyWidgetSize(options)
+        val widthDp = size.width.roundToInt().coerceAtLeast(1)
+        val heightDp = size.height.roundToInt().coerceAtLeast(1)
+
         Handler(Looper.getMainLooper()).postDelayed({
             if (readyThemeKey != readThemeColors(context).key) {
                 return@postDelayed
             }
-            val reveal = RemoteViews(context.packageName, R.layout.schedule_widget)
-            reveal.setViewVisibility(R.id.widget_list, View.VISIBLE)
-            reveal.setViewVisibility(R.id.widget_refresh_cover, View.GONE)
-            AppWidgetManager.getInstance(context)
-                .partiallyUpdateAppWidget(widgetId, reveal)
-        }, COLLECTION_READY_SETTLE_MS)
+            runTransitionFrame(
+                context = context,
+                widgetId = widgetId,
+                readyThemeKey = readyThemeKey,
+                widthDp = widthDp,
+                heightDp = heightDp,
+                frame = 0,
+            )
+        }, TRANSITION_PREPARE_MS)
+    }
+
+    private fun runTransitionFrame(
+        context: Context,
+        widgetId: Int,
+        readyThemeKey: String,
+        widthDp: Int,
+        heightDp: Int,
+        frame: Int,
+    ) {
+        if (readyThemeKey != readThemeColors(context).key) {
+            return
+        }
+        val denominator = (TRANSITION_FRAME_COUNT - 1).coerceAtLeast(1)
+        val progress = frame.toFloat() / denominator.toFloat()
+        val bitmap = renderWidgetTransitionFrame(
+            context,
+            widgetId,
+            widthDp,
+            heightDp,
+            progress,
+        )
+        if (bitmap == null) {
+            finishRevealTransition(context, widgetId, readyThemeKey)
+            return
+        }
+
+        val frameViews = RemoteViews(context.packageName, R.layout.schedule_widget)
+        frameViews.setImageViewBitmap(R.id.widget_refresh_cover, bitmap)
+        frameViews.setViewVisibility(R.id.widget_refresh_cover, View.VISIBLE)
+        frameViews.setViewVisibility(R.id.widget_list, View.INVISIBLE)
+        AppWidgetManager.getInstance(context)
+            .partiallyUpdateAppWidget(widgetId, frameViews)
+
+        if (frame + 1 < TRANSITION_FRAME_COUNT) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                runTransitionFrame(
+                    context = context,
+                    widgetId = widgetId,
+                    readyThemeKey = readyThemeKey,
+                    widthDp = widthDp,
+                    heightDp = heightDp,
+                    frame = frame + 1,
+                )
+            }, TRANSITION_FRAME_DELAY_MS)
+        } else {
+            Handler(Looper.getMainLooper()).postDelayed({
+                finishRevealTransition(context, widgetId, readyThemeKey)
+            }, TRANSITION_FINAL_HOLD_MS)
+        }
+    }
+
+    private fun finishRevealTransition(
+        context: Context,
+        widgetId: Int,
+        readyThemeKey: String,
+    ) {
+        if (readyThemeKey != readThemeColors(context).key) {
+            return
+        }
+        val reveal = RemoteViews(context.packageName, R.layout.schedule_widget)
+        reveal.setViewVisibility(R.id.widget_list, View.VISIBLE)
+        reveal.setViewVisibility(R.id.widget_refresh_cover, View.GONE)
+        AppWidgetManager.getInstance(context)
+            .partiallyUpdateAppWidget(widgetId, reveal)
     }
 
     private data class ThemeColors(
@@ -430,7 +513,10 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
 
         private const val DATE_PICKER_REQUEST_CODE_BASE = 100_000
         private const val MAX_EXACT_LAYOUTS = 16
-        private const val COLLECTION_READY_SETTLE_MS = 300L
+        private const val TRANSITION_PREPARE_MS = 520L
+        private const val TRANSITION_FRAME_COUNT = 8
+        private const val TRANSITION_FRAME_DELAY_MS = 62L
+        private const val TRANSITION_FINAL_HOLD_MS = 180L
         private const val CALENDAR_HEIGHT_FRACTION = 0.42f
         private const val CALENDAR_WIDTH_FRACTION = 0.085f
         private const val CALENDAR_PADDING_FRACTION = 0.19f

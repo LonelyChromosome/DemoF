@@ -273,6 +273,84 @@ internal fun renderWidgetRefreshCover(
     return renderWidgetSlide(context, first, renderWidthDp, renderHeightDp)
 }
 
+internal fun renderWidgetTransitionFrame(
+    context: Context,
+    widgetId: Int,
+    renderWidthDp: Int,
+    renderHeightDp: Int,
+    progress: Float,
+): Bitmap? {
+    val first = readWidgetClasses(context, widgetId).firstOrNull() ?: return null
+    val sharp = renderWidgetSlide(context, first, renderWidthDp, renderHeightDp)
+    val output = Bitmap.createBitmap(sharp.width, sharp.height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(output)
+    val p = progress.coerceIn(0f, 1f)
+
+    // RemoteViews/widget builds cannot rely on Paint RenderEffect across all
+    // launcher/API combinations. Approximate a frosted blur with several
+    // translucent offset taps; the sharp card is revealed over it afterwards.
+    val softOffset = (sharp.height * TRANSITION_BLUR_HEIGHT_FRACTION)
+        .coerceIn(2f, 10f)
+    val frostPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+        alpha = 28
+    }
+    val taps = arrayOf(
+        -1f to 0f,
+        1f to 0f,
+        0f to -1f,
+        0f to 1f,
+        -0.7f to -0.7f,
+        0.7f to -0.7f,
+        -0.7f to 0.7f,
+        0.7f to 0.7f,
+    )
+    for ((dx, dy) in taps) {
+        canvas.drawBitmap(sharp, dx * softOffset, dy * softOffset, frostPaint)
+    }
+    val frostCenterPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+        alpha = 76
+    }
+    canvas.drawBitmap(sharp, 0f, 0f, frostCenterPaint)
+
+    val theme = readWidgetTheme(context)
+    val veilAlpha = ((1f - p) * 92f).toInt().coerceIn(0, 92)
+    if (veilAlpha > 0) {
+        val veilColor = (theme.startColor and 0x00FFFFFF) or (veilAlpha shl 24)
+        canvas.drawColor(veilColor)
+    }
+
+    val revealRight = sharp.width * p
+    if (revealRight > 0f) {
+        val save = canvas.save()
+        canvas.clipRect(0f, 0f, revealRight, sharp.height.toFloat())
+        canvas.drawBitmap(sharp, 0f, 0f, null)
+        canvas.restoreToCount(save)
+    }
+
+    if (p > 0f && p < 1f) {
+        val glowWidth = (sharp.width * TRANSITION_EDGE_WIDTH_FRACTION)
+            .coerceIn(12f, 54f)
+        val left = (revealRight - glowWidth).coerceAtLeast(0f)
+        val right = (revealRight + glowWidth).coerceAtMost(sharp.width.toFloat())
+        if (right > left) {
+            val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = LinearGradient(
+                    left,
+                    0f,
+                    right,
+                    0f,
+                    intArrayOf(0x00FFFFFF, 0x5AFFFFFF, 0x00FFFFFF),
+                    floatArrayOf(0f, 0.5f, 1f),
+                    Shader.TileMode.CLAMP,
+                )
+            }
+            canvas.drawRect(left, 0f, right, sharp.height.toFloat(), glow)
+        }
+    }
+
+    return output
+}
+
 private data class WidgetTheme(
     val key: String,
     val startColor: Int,
@@ -465,6 +543,8 @@ private const val SNAPSHOT_KEY = "flutter.better_phenikaa_snapshot_v1"
 private const val THEME_KEY = "flutter.appTheme"
 private const val DATE_PATTERN = "yyyy-MM-dd"
 private const val DATE_TIME_PATTERN = "yyyy-MM-dd'T'HH:mm:ss"
+private const val TRANSITION_BLUR_HEIGHT_FRACTION = 0.075f
+private const val TRANSITION_EDGE_WIDTH_FRACTION = 0.055f
 private const val DEFAULT_WIDGET_WIDTH_DP = 320
 private const val DEFAULT_WIDGET_HEIGHT_DP = 64
 
