@@ -93,7 +93,26 @@ private class ScheduleWidgetFactory(
         return views
     }
 
-    override fun getLoadingView(): RemoteViews? = null
+    override fun getLoadingView(): RemoteViews? {
+        val item = items.firstOrNull() ?: return null
+        val views = RemoteViews(context.packageName, R.layout.schedule_widget_item)
+        val widthDp = renderWidthDp.coerceAtLeast(1)
+        val heightDp = renderHeightDp.coerceAtLeast(1)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            views.setViewLayoutWidth(
+                R.id.widget_slide_item,
+                widthDp.toFloat(),
+                TypedValue.COMPLEX_UNIT_DIP,
+            )
+            views.setViewLayoutHeight(
+                R.id.widget_slide_item,
+                heightDp.toFloat(),
+                TypedValue.COMPLEX_UNIT_DIP,
+            )
+        }
+        views.setImageViewBitmap(R.id.widget_slide_image, renderSlide(item))
+        return views
+    }
 
     override fun getViewTypeCount(): Int = 1
 

@@ -82,8 +82,11 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             )
         }
 
-        appWidgetManager.updateAppWidget(widgetId, views)
+        // Refresh the existing collection factory before applying the small
+        // native chrome update. With a stable adapter URI this updates the visible
+        // card in-place instead of showing a torn old/new theme frame.
         appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
+        appWidgetManager.updateAppWidget(widgetId, views)
     }
 
     private fun buildWidgetViews(
@@ -173,7 +176,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
             putExtra(EXTRA_RENDER_WIDTH_DP, renderWidthDp)
             putExtra(EXTRA_RENDER_HEIGHT_DP, renderHeightDp)
-            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken/${theme.key}")
+            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken")
         }
         views.setRemoteAdapter(R.id.widget_list, serviceIntent)
         views.setEmptyView(R.id.widget_list, R.id.widget_empty)

@@ -901,59 +901,64 @@ class AppThemeSettingButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = AppThemeController.instance;
-    final palette = controller.palette;
-    return AppThemePanel(
-      elevated: false,
-      alt: true,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: InkWell(
-        onTap: () => showAppThemePicker(context),
-        child: Row(
-          children: <Widget>[
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: <Color>[palette.primary, palette.accent],
-                ),
-                borderRadius: BorderRadius.circular(
-                  palette.geometry == AppThemeGeometry.rounded ? 10 : 1,
-                ),
-              ),
-              child: Icon(
-                controller.theme.icon,
-                color: palette.widgetText,
-                size: 21,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    'Giao diện',
-                    style: TextStyle(
-                      color: palette.textPrimary,
-                      fontWeight: FontWeight.w800,
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final palette = controller.palette;
+        return AppThemePanel(
+          elevated: false,
+          alt: true,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: InkWell(
+            onTap: () => showAppThemePicker(context),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: <Color>[palette.primary, palette.accent],
+                    ),
+                    borderRadius: BorderRadius.circular(
+                      palette.geometry == AppThemeGeometry.rounded ? 10 : 1,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    controller.theme.label,
-                    style: TextStyle(
-                      color: palette.textSecondary,
-                      fontSize: 11.5,
-                    ),
+                  child: Icon(
+                    controller.theme.icon,
+                    color: palette.widgetText,
+                    size: 21,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Giao diện',
+                        style: TextStyle(
+                          color: palette.textPrimary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        controller.theme.label,
+                        style: TextStyle(
+                          color: palette.textSecondary,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: palette.textSecondary),
+              ],
             ),
-            Icon(Icons.chevron_right_rounded, color: palette.textSecondary),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
