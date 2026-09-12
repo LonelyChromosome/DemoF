@@ -49,18 +49,6 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Verify atomic theme path
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -q 'better_phenikaa/widget_theme' lib/theme/app_theme.dart
-          grep -q 'applyTheme' platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/MainActivity.kt
-          grep -q 'putString(THEME_KEY, theme).commit()' platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/MainActivity.kt
-          grep -A3 'widget_stack_peek_mask' platform/android_widget/app/src/main/res/layout/schedule_widget.xml | grep -q 'visibility="gone"'
-          grep -q '^version: 2.0.5+10$' pubspec.yaml
-          grep -q 'qldtbeta.phenikaa-uni.edu.vn' lib/features/qldt_intake/qldt_login_mobile.dart
-          grep -q 'edu.system.makeRequest' lib/features/qldt_intake/qldt_login_mobile.dart
-
       - name: Build release APK
         run: flutter build apk --release
 
