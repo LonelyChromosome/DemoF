@@ -1,0 +1,107 @@
+name: Widget freeze transition
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/widget-freeze-transition.yml'
+      - 'tool/apply_widget_freeze_transition.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply frozen old-theme transition
+        run: python3 tool/apply_widget_freeze_transition.py
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter 3.47.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Bootstrap project
+        run: bash tool/bootstrap.sh
+
+      - name: Format
+        run: dart format lib test
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Verify freeze transition regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt
+          S=platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetService.kt
+          L=platform/android_widget/app/src/main/res/layout/schedule_widget.xml
+          M=android/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/MainActivity.kt
+          T=lib/theme/app_theme.dart
+          grep -q 'stageThemeTransition' "$P"
+          grep -q 'refreshHiddenCollection' "$P"
+          grep -q 'THEME_FREEZE_SETTLE_MS = 140L' "$M"
+          grep -q 'fromThemeKey' "$S"
+          grep -q 'oldSharp' "$S"
+          grep -q 'widgetThemeForKey' "$S"
+          grep -q 'transitionFromKey' "$P"
+          grep -q 'transitionTargetKey' "$P"
+          grep -q 'prefs.setString(_preferenceKey, value.storageKey)' "$T"
+          ! grep -q 'prefs.setString(_widgetPreferenceKey, value.storageKey),' "$T"
+          python3 - <<'PY'
+          from pathlib import Path
+          x = Path('platform/android_widget/app/src/main/res/layout/schedule_widget.xml').read_text()
+          assert x.index('@+id/widget_empty') < x.index('@+id/widget_refresh_cover')
+          PY
+          grep -q '^version: 2.0.11+16$' pubspec.yaml
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Package APK
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/Better_Phenikaa_App_v2.0.11.apk
+          sha256sum dist/Better_Phenikaa_App_v2.0.11.apk > dist/Better_Phenikaa_App_v2.0.11.sha256
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Better-Phenikaa-App-v2.0.11-freeze-transition
+          path: dist/*
+          retention-days: 30
+
+      - name: Commit source
+        shell: bash
+        run: |
+          git config user.name 'cooc'
+          git config user.email 'minhdaonguyenad@gmail.com'
+          git add lib/theme/app_theme.dart \
+                  android/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/MainActivity.kt \
+                  platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/MainActivity.kt \
+                  platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetProvider.kt \
+                  platform/android_widget/app/src/main/kotlin/vn/edu/phenikaa/better_phenikaa_schedule/ScheduleWidgetService.kt \
+                  platform/android_widget/app/src/main/res/layout/schedule_widget.xml \
+                  pubspec.yaml
+          git commit -m 'fix: freeze old widget theme until transition is ready'
+          git push origin HEAD:main
