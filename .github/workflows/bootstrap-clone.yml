@@ -1,0 +1,38 @@
+name: Bootstrap DemoF from demoD
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  clone-base:
+    if: github.event.head_commit.message != 'chore: clone Better Phenikaa 1.0 as 2.0 base'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DemoF
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone current Better Phenikaa 1.0 source
+        run: |
+          git clone --depth 1 --branch feature/full-app-implementation \
+            https://github.com/LonelyChromosome/demoD.git /tmp/demoD
+
+      - name: Mirror source tree into DemoF
+        run: |
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.github/workflows/' \
+            /tmp/demoD/ ./
+
+      - name: Commit 2.0 base
+        run: |
+          git config user.name "cooc"
+          git config user.email "minhdaonguyenad@gmail.com"
+          git add -A
+          git commit -m "chore: clone Better Phenikaa 1.0 as 2.0 base"
+          git push origin HEAD:main
