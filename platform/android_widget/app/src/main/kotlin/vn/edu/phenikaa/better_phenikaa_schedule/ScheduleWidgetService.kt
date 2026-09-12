@@ -46,13 +46,16 @@ private class ScheduleWidgetFactory(
     private val renderHeightDp: Int,
 ) : RemoteViewsService.RemoteViewsFactory {
     private var items: List<WidgetClass> = emptyList()
+    private var readySignalSent = false
 
     override fun onCreate() {
         reload()
+        readySignalSent = false
     }
 
     override fun onDataSetChanged() {
         reload()
+        readySignalSent = false
     }
 
     override fun onDestroy() {
@@ -84,6 +87,7 @@ private class ScheduleWidgetFactory(
             R.id.widget_slide_image,
             renderSlide(item),
         )
+        signalReadyOnce()
         views.setOnClickFillInIntent(
             R.id.widget_slide_item,
             Intent().apply {
@@ -123,6 +127,21 @@ private class ScheduleWidgetFactory(
 
     private fun reload() {
         items = readWidgetClasses(context, widgetId)
+    }
+
+    private fun signalReadyOnce() {
+        if (readySignalSent || widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+            return
+        }
+        readySignalSent = true
+        val readyThemeKey = readWidgetTheme(context).key
+        context.sendBroadcast(
+            Intent(context, ScheduleWidgetProvider::class.java).apply {
+                action = ScheduleWidgetProvider.ACTION_COLLECTION_FRAME_READY
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                putExtra(ScheduleWidgetProvider.EXTRA_READY_THEME_KEY, readyThemeKey)
+            },
+        )
     }
 
     private fun renderSlide(item: WidgetClass): Bitmap =

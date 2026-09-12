@@ -25,6 +25,24 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 class ScheduleWidgetProvider : HomeWidgetProvider() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_COLLECTION_FRAME_READY) {
+            val widgetId = intent.getIntExtra(
+                AppWidgetManager.EXTRA_APPWIDGET_ID,
+                AppWidgetManager.INVALID_APPWIDGET_ID,
+            )
+            val readyThemeKey = intent.getStringExtra(EXTRA_READY_THEME_KEY)
+            if (
+                widgetId != AppWidgetManager.INVALID_APPWIDGET_ID &&
+                readyThemeKey != null
+            ) {
+                revealCollectionWhenReady(context, widgetId, readyThemeKey)
+            }
+            return
+        }
+        super.onReceive(context, intent)
+    }
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -109,7 +127,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 .putString(contentTokenKey(widgetId), contentToken)
                 .putString(themeTokenKey(widgetId), themeKey)
                 .apply()
-            scheduleRefreshCoverHide(context, appWidgetManager, widgetId)
         } else if (themeChanged) {
             // Keep the adapter identity stable. Repaint its existing children in place;
             // their opaque backgrounds prevent any neighbouring item from showing
@@ -117,7 +134,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             appWidgetManager.partiallyUpdateAppWidget(widgetId, views)
             appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
             renderStatePrefs.edit().putString(themeTokenKey(widgetId), themeKey).apply()
-            scheduleRefreshCoverHide(context, appWidgetManager, widgetId)
         } else {
             appWidgetManager.partiallyUpdateAppWidget(widgetId, views)
         }
@@ -261,17 +277,25 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         return views
     }
 
-    private fun scheduleRefreshCoverHide(
+    private fun revealCollectionWhenReady(
         context: Context,
-        appWidgetManager: AppWidgetManager,
         widgetId: Int,
+        readyThemeKey: String,
     ) {
+        // Never reveal a frame that belongs to an older rapid theme change.
+        if (readyThemeKey != readThemeColors(context).key) {
+            return
+        }
         Handler(Looper.getMainLooper()).postDelayed({
+            if (readyThemeKey != readThemeColors(context).key) {
+                return@postDelayed
+            }
             val reveal = RemoteViews(context.packageName, R.layout.schedule_widget)
             reveal.setViewVisibility(R.id.widget_list, View.VISIBLE)
             reveal.setViewVisibility(R.id.widget_refresh_cover, View.GONE)
-            appWidgetManager.partiallyUpdateAppWidget(widgetId, reveal)
-        }, REFRESH_COVER_HOLD_MS)
+            AppWidgetManager.getInstance(context)
+                .partiallyUpdateAppWidget(widgetId, reveal)
+        }, COLLECTION_READY_SETTLE_MS)
     }
 
     private data class ThemeColors(
@@ -395,6 +419,9 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
     companion object {
         const val EXTRA_RENDER_WIDTH_DP = "renderWidthDp"
         const val EXTRA_RENDER_HEIGHT_DP = "renderHeightDp"
+        const val ACTION_COLLECTION_FRAME_READY =
+            "vn.edu.phenikaa.better_phenikaa_schedule.COLLECTION_FRAME_READY"
+        const val EXTRA_READY_THEME_KEY = "readyThemeKey"
         const val WIDGET_SELECTION_PREFS = "better_phenikaa_widget_selection"
         private const val WIDGET_RENDER_STATE_PREFS = "better_phenikaa_widget_render_state"
 
@@ -403,7 +430,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
 
         private const val DATE_PICKER_REQUEST_CODE_BASE = 100_000
         private const val MAX_EXACT_LAYOUTS = 16
-        private const val REFRESH_COVER_HOLD_MS = 1600L
+        private const val COLLECTION_READY_SETTLE_MS = 300L
         private const val CALENDAR_HEIGHT_FRACTION = 0.42f
         private const val CALENDAR_WIDTH_FRACTION = 0.085f
         private const val CALENDAR_PADDING_FRACTION = 0.19f
