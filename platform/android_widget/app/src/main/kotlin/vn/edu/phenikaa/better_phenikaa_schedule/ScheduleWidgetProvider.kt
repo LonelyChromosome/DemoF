@@ -49,6 +49,13 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         widgetId: Int,
     ) {
         val options = appWidgetManager.getAppWidgetOptions(widgetId)
+        val renderStatePrefs = context.getSharedPreferences(
+            WIDGET_RENDER_STATE_PREFS,
+            Context.MODE_PRIVATE,
+        )
+        val contentToken = collectionContentToken(context, widgetId, options)
+        val previousToken = renderStatePrefs.getString(contentTokenKey(widgetId), null)
+        val collectionChanged = previousToken != contentToken
 
         val views = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val exactSizes = exactWidgetSizes(options)
@@ -60,6 +67,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                         widgetId = widgetId,
                         visualWidthDp = size.width,
                         visualHeightDp = size.height,
+                        bindCollection = collectionChanged,
                     )
                 }
                 RemoteViews(sizedViews)
@@ -70,6 +78,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                     widgetId = widgetId,
                     visualWidthDp = fallback.width,
                     visualHeightDp = fallback.height,
+                    bindCollection = collectionChanged,
                 )
             }
         } else {
@@ -79,15 +88,19 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 widgetId = widgetId,
                 visualWidthDp = fallback.width,
                 visualHeightDp = fallback.height,
+                bindCollection = collectionChanged,
             )
         }
 
-        // Apply the stable outer frame first. The StackView keeps its current child
-        // on screen, then the factory swaps refreshed bitmaps with zero-duration
-        // in/out animators. This avoids Samsung Launcher exposing a transformed
-        // loading/old-theme child for ~1 second while a theme refresh is running.
-        appWidgetManager.updateAppWidget(widgetId, views)
-        appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
+        if (collectionChanged) {
+            appWidgetManager.updateAppWidget(widgetId, views)
+            appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
+            renderStatePrefs.edit().putString(contentTokenKey(widgetId), contentToken).apply()
+        } else {
+            // Theme-only path: update background/calendar chrome without touching
+            // StackView or its adapter. No old/new collection frames can overlap.
+            appWidgetManager.partiallyUpdateAppWidget(widgetId, views)
+        }
     }
 
     private fun buildWidgetViews(
@@ -95,6 +108,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         widgetId: Int,
         visualWidthDp: Float,
         visualHeightDp: Float,
+        bindCollection: Boolean,
     ): RemoteViews {
         val widthDp = visualWidthDp.coerceAtLeast(1f)
         val heightDp = visualHeightDp.coerceAtLeast(1f)
@@ -161,31 +175,33 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         views.setInt(R.id.widget_calendar, "setColorFilter", theme.iconColor)
         views.setTextColor(R.id.widget_empty, theme.textColor)
 
-        val sizeToken = String.format(
-            Locale.US,
-            "%.1fx%.1f",
-            widthDp,
-            heightDp,
-        )
-        val serviceIntent = Intent(context, ScheduleWidgetService::class.java).apply {
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-            putExtra(EXTRA_RENDER_WIDTH_DP, renderWidthDp)
-            putExtra(EXTRA_RENDER_HEIGHT_DP, renderHeightDp)
-            data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken")
-        }
-        views.setRemoteAdapter(R.id.widget_list, serviceIntent)
-        views.setEmptyView(R.id.widget_list, R.id.widget_empty)
-
-        context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launchIntent ->
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            val openApp = PendingIntent.getActivity(
-                context,
-                widgetId,
-                launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        if (bindCollection) {
+            val sizeToken = String.format(
+                Locale.US,
+                "%.1fx%.1f",
+                widthDp,
+                heightDp,
             )
-            views.setPendingIntentTemplate(R.id.widget_list, openApp)
-            views.setOnClickPendingIntent(R.id.widget_empty, openApp)
+            val serviceIntent = Intent(context, ScheduleWidgetService::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                putExtra(EXTRA_RENDER_WIDTH_DP, renderWidthDp)
+                putExtra(EXTRA_RENDER_HEIGHT_DP, renderHeightDp)
+                data = Uri.parse("better-phenikaa://widget/$widgetId/$sizeToken")
+            }
+            views.setRemoteAdapter(R.id.widget_list, serviceIntent)
+            views.setEmptyView(R.id.widget_list, R.id.widget_empty)
+
+            context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launchIntent ->
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                val openApp = PendingIntent.getActivity(
+                    context,
+                    widgetId,
+                    launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+                )
+                views.setPendingIntentTemplate(R.id.widget_list, openApp)
+                views.setOnClickPendingIntent(R.id.widget_empty, openApp)
+            }
         }
 
         val chooseDateIntent = Intent(context, WidgetDatePickerActivity::class.java).apply {
@@ -200,13 +216,15 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_calendar, chooseDate)
 
-        val selectionPrefs = context.getSharedPreferences(
-            WIDGET_SELECTION_PREFS,
-            Context.MODE_PRIVATE,
-        )
-        if (selectionPrefs.getBoolean(resetChildKey(widgetId), false)) {
-            views.setDisplayedChild(R.id.widget_list, 0)
-            selectionPrefs.edit().remove(resetChildKey(widgetId)).apply()
+        if (bindCollection) {
+            val selectionPrefs = context.getSharedPreferences(
+                WIDGET_SELECTION_PREFS,
+                Context.MODE_PRIVATE,
+            )
+            if (selectionPrefs.getBoolean(resetChildKey(widgetId), false)) {
+                views.setDisplayedChild(R.id.widget_list, 0)
+                selectionPrefs.edit().remove(resetChildKey(widgetId)).apply()
+            }
         }
         return views
     }
@@ -228,7 +246,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             "lol" -> ThemeColors(key, 0xFF06131A.toInt(), 0xFF0B343A.toInt(), 0xFFF0E6D2.toInt(), 0xFFF0E6D2.toInt())
             "valorant" -> ThemeColors(key, 0xFF0F1923.toInt(), 0xFF24313B.toInt(), 0xFFECE8E1.toInt(), 0xFFECE8E1.toInt())
             "minecraft" -> ThemeColors(key, 0xFF3A2B20.toInt(), 0xFF6B4A2F.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
-            "facebook" -> ThemeColors(key, 0xFFFFFFFF.toInt(), 0xFFE7F3FF.toInt(), 0xFF050505.toInt(), 0xFF0866FF.toInt())
+            "facebook" -> ThemeColors(key, 0xFF1877F2.toInt(), 0xFF0866FF.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
             "shopee" -> ThemeColors(key, 0xFFEE4D2D.toInt(), 0xFFFF6A3D.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
             "tiktok" -> ThemeColors(key, 0xFF111111.toInt(), 0xFF2A1520.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
             "ben10" -> ThemeColors(key, 0xFF101510.toInt(), 0xFF1D5F22.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt())
@@ -262,6 +280,32 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         Canvas(bitmap).drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         return bitmap
     }
+
+    private fun collectionContentToken(
+        context: Context,
+        widgetId: Int,
+        options: Bundle,
+    ): String {
+        val snapshot = context
+            .getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            .getString("flutter.better_phenikaa_snapshot_v1", "")
+            .orEmpty()
+        val selectedDate = context
+            .getSharedPreferences(WIDGET_SELECTION_PREFS, Context.MODE_PRIVATE)
+            .getString(selectedDateKey(widgetId), "")
+            .orEmpty()
+        val sizeSignature = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            exactWidgetSizes(options).joinToString(";") { size ->
+                String.format(Locale.US, "%.1fx%.1f", size.width, size.height)
+            }
+        } else {
+            val size = legacyWidgetSize(options)
+            String.format(Locale.US, "%.1fx%.1f", size.width, size.height)
+        }
+        return "${snapshot.hashCode()}|$selectedDate|$sizeSignature"
+    }
+
+    private fun contentTokenKey(widgetId: Int): String = "content_token_$widgetId"
 
     @Suppress("DEPRECATION")
     private fun exactWidgetSizes(options: Bundle): List<SizeF> {
@@ -305,6 +349,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         const val EXTRA_RENDER_WIDTH_DP = "renderWidthDp"
         const val EXTRA_RENDER_HEIGHT_DP = "renderHeightDp"
         const val WIDGET_SELECTION_PREFS = "better_phenikaa_widget_selection"
+        private const val WIDGET_RENDER_STATE_PREFS = "better_phenikaa_widget_render_state"
 
         fun selectedDateKey(widgetId: Int): String = "selected_date_$widgetId"
         fun resetChildKey(widgetId: Int): String = "reset_child_$widgetId"

@@ -136,20 +136,6 @@ private class ScheduleWidgetFactory(
         val widthPx = width.toFloat()
         val heightPx = height.toFloat()
 
-        val theme = readWidgetTheme(context)
-        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(
-                0f,
-                0f,
-                widthPx,
-                0f,
-                theme.startColor,
-                theme.endColor,
-                Shader.TileMode.CLAMP,
-            )
-        }
-        canvas.drawRect(0f, 0f, widthPx, heightPx, backgroundPaint)
-
         // Every coordinate is proportional to the real frame supplied by the host.
         // Keep the visual spacing from the approved layout while leaving the far
         // lower-right edge clear for the StackView peek mask in schedule_widget.xml.
@@ -157,15 +143,20 @@ private class ScheduleWidgetFactory(
         val titleRight = widthPx * TITLE_RIGHT_FRACTION
         val detailRight = widthPx * DETAIL_RIGHT_FRACTION
 
+        // Theme-independent transparent collection layer. The native themed
+        // background below StackView changes atomically, so switching themes never
+        // invalidates/rebuilds the collection on Samsung Launcher.
         val subjectPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = theme.textColor
-            textSize = heightPx * SUBJECT_TEXT_HEIGHT_FRACTION * if (theme.key == "minecraft") 0.86f else 1f
-            typeface = themedTypeface(context, theme, Typeface.BOLD)
+            color = 0xFFFFFFFF.toInt()
+            textSize = heightPx * SUBJECT_TEXT_HEIGHT_FRACTION
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(heightPx * 0.018f, 0f, heightPx * 0.008f, 0x66000000)
         }
         val detailPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = theme.subtextColor
-            textSize = heightPx * DETAIL_TEXT_HEIGHT_FRACTION * if (theme.key == "minecraft") 0.84f else 1f
-            typeface = themedTypeface(context, theme, Typeface.NORMAL)
+            color = 0xFFE4EBF3.toInt()
+            textSize = heightPx * DETAIL_TEXT_HEIGHT_FRACTION
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            setShadowLayer(heightPx * 0.015f, 0f, heightPx * 0.006f, 0x66000000)
         }
 
         val titleMaxWidth = (titleRight - left).coerceAtLeast(

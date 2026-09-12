@@ -46,12 +46,13 @@
 
     <ImageView
         android:id="@+id/widget_stack_peek_mask"
-        android:layout_width="40dp"
-        android:layout_height="26dp"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
         android:layout_gravity="bottom|end"
         android:clickable="false"
         android:contentDescription="@null"
-        android:focusable="false" />
+        android:focusable="false"
+        android:visibility="gone" />
 
     <ImageView
         android:id="@+id/widget_calendar"
