@@ -380,8 +380,9 @@ class AppThemeController extends ChangeNotifier {
     _theme = value;
     notifyListeners();
 
-    // Dispatch the native widget update at the exact theme tap. The widget's
-    // theme-only path is a partial RemoteViews update and never rebinds StackView.
+    // Queue the native widget update at the exact theme tap. Android starts the
+    // visible transition only after this Activity leaves the foreground, so the
+    // animation cannot finish invisibly behind the theme picker.
     final nativeUpdate = _applyWidgetThemeImmediately(value.storageKey);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_preferenceKey, value.storageKey);

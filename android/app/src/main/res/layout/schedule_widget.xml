@@ -32,6 +32,18 @@
         android:clipToPadding="true"
         android:loopViews="true" />
 
+    <TextView
+        android:id="@+id/widget_empty"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:paddingStart="18dp"
+        android:paddingEnd="48dp"
+        android:text="Không có lịch học"
+        android:textColor="#FFFFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
     <!--
       Atomic refresh cover. During collection/theme invalidation Samsung Launcher can
       briefly lay out several StackView children at once. The provider puts a fully
@@ -49,27 +61,16 @@
         android:scaleType="fitXY"
         android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/widget_empty"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:paddingStart="18dp"
-        android:paddingEnd="48dp"
-        android:text="Không có lịch học"
-        android:textColor="#FFFFFFFF"
-        android:textSize="14sp"
-        android:textStyle="bold" />
-
+    <!-- Transparent-centre, theme-coloured edge mask. StackView deliberately
+         keeps neighbouring cards for swipe navigation; this covers only their
+         transformed outer peek without intercepting touch. -->
     <ImageView
         android:id="@+id/widget_stack_peek_mask"
-        android:layout_width="1dp"
-        android:layout_height="1dp"
-        android:layout_gravity="bottom|end"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:clickable="false"
         android:contentDescription="@null"
-        android:focusable="false"
-        android:visibility="gone" />
+        android:focusable="false" />
 
     <ImageView
         android:id="@+id/widget_calendar"
