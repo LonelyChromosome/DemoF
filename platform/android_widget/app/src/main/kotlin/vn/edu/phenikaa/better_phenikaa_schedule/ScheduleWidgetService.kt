@@ -87,6 +87,7 @@ private class ScheduleWidgetFactory(
             R.id.widget_slide_image,
             renderSlide(item),
         )
+        rememberVisiblePosition(position)
         signalReadyOnce()
         views.setOnClickFillInIntent(
             R.id.widget_slide_item,
@@ -98,7 +99,7 @@ private class ScheduleWidgetFactory(
     }
 
     override fun getLoadingView(): RemoteViews? {
-        val item = items.firstOrNull() ?: return null
+        val item = currentWidgetClass(context, widgetId) ?: return null
         val views = RemoteViews(context.packageName, R.layout.schedule_widget_item)
         val widthDp = renderWidthDp.coerceAtLeast(1)
         val heightDp = renderHeightDp.coerceAtLeast(1)
@@ -129,6 +130,14 @@ private class ScheduleWidgetFactory(
         items = readWidgetClasses(context, widgetId)
     }
 
+    private fun rememberVisiblePosition(position: Int) {
+        if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return
+        context.getSharedPreferences(WIDGET_VISIBLE_POSITION_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(visiblePositionKey(widgetId), position)
+            .apply()
+    }
+
     private fun signalReadyOnce() {
         if (readySignalSent || widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
             return
@@ -146,9 +155,7 @@ private class ScheduleWidgetFactory(
 
     private fun renderSlide(item: WidgetClass): Bitmap =
         renderWidgetSlide(context, item, renderWidthDp, renderHeightDp)
-
 }
-
 
 private fun renderWidgetSlide(
     context: Context,
@@ -157,111 +164,104 @@ private fun renderWidgetSlide(
     renderHeightDp: Int,
     themeOverrideKey: String? = null,
 ): Bitmap {
-        val density = context.resources.displayMetrics.density
-        val widthDp = renderWidthDp.coerceAtLeast(1)
-        val heightDp = renderHeightDp.coerceAtLeast(1)
-        val width = (widthDp * density).toInt().coerceAtLeast(1)
-        val height = (heightDp * density).toInt().coerceAtLeast(1)
-        val horizontal = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(horizontal)
-        val widthPx = width.toFloat()
-        val heightPx = height.toFloat()
-        val theme = themeOverrideKey?.let(::widgetThemeForKey) ?: readWidgetTheme(context)
+    val density = context.resources.displayMetrics.density
+    val widthDp = renderWidthDp.coerceAtLeast(1)
+    val heightDp = renderHeightDp.coerceAtLeast(1)
+    val width = (widthDp * density).toInt().coerceAtLeast(1)
+    val height = (heightDp * density).toInt().coerceAtLeast(1)
+    val horizontal = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(horizontal)
+    val widthPx = width.toFloat()
+    val heightPx = height.toFloat()
+    val theme = themeOverrideKey?.let(::widgetThemeForKey) ?: readWidgetTheme(context)
 
-        // StackView keeps neighbouring children alive. Every child must be opaque;
-        // transparent text-only children can all become visible together after a
-        // Samsung Launcher refresh/restore and create the overlapping-text defect.
-        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(
-                0f,
-                0f,
-                widthPx,
-                0f,
-                theme.startColor,
-                theme.endColor,
-                Shader.TileMode.CLAMP,
-            )
-        }
-        canvas.drawRect(0f, 0f, widthPx, heightPx, backgroundPaint)
-
-        // Every coordinate is proportional to the real frame supplied by the host.
-        // Keep the visual spacing from the approved layout while leaving the far
-        // lower-right edge clear for the StackView peek mask in schedule_widget.xml.
-        val left = widthPx * CONTENT_LEFT_FRACTION
-        val titleRight = widthPx * TITLE_RIGHT_FRACTION
-        val detailRight = widthPx * DETAIL_RIGHT_FRACTION
-
-        val subjectPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = theme.textColor
-            textSize = heightPx * SUBJECT_TEXT_HEIGHT_FRACTION
-            typeface = themedTypeface(context, theme, Typeface.BOLD)
-            setShadowLayer(heightPx * 0.018f, 0f, heightPx * 0.008f, 0x66000000)
-        }
-        val detailPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = theme.subtextColor
-            textSize = heightPx * DETAIL_TEXT_HEIGHT_FRACTION
-            typeface = themedTypeface(context, theme, Typeface.NORMAL)
-            setShadowLayer(heightPx * 0.015f, 0f, heightPx * 0.006f, 0x66000000)
-        }
-
-        val titleMaxWidth = (titleRight - left).coerceAtLeast(
-            widthPx * MIN_TITLE_WIDTH_FRACTION,
+    val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        shader = LinearGradient(
+            0f,
+            0f,
+            widthPx,
+            0f,
+            theme.startColor,
+            theme.endColor,
+            Shader.TileMode.CLAMP,
         )
-        val naturalTitleWidth = subjectPaint.measureText(item.subject)
-        if (naturalTitleWidth > titleMaxWidth && naturalTitleWidth > 0f) {
-            val fitScale = (titleMaxWidth / naturalTitleWidth)
-                .coerceAtLeast(MIN_SUBJECT_FIT_SCALE)
-            subjectPaint.textSize *= fitScale
-        }
-        val subject = TextUtils.ellipsize(
-            item.subject,
-            subjectPaint,
-            titleMaxWidth,
-            TextUtils.TruncateAt.END,
-        )
+    }
+    canvas.drawRect(0f, 0f, widthPx, heightPx, backgroundPaint)
+
+    val left = widthPx * CONTENT_LEFT_FRACTION
+    val titleRight = widthPx * TITLE_RIGHT_FRACTION
+    val detailRight = widthPx * DETAIL_RIGHT_FRACTION
+
+    val subjectPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = theme.textColor
+        textSize = heightPx * SUBJECT_TEXT_HEIGHT_FRACTION
+        typeface = themedTypeface(context, theme, Typeface.BOLD)
+        setShadowLayer(heightPx * 0.018f, 0f, heightPx * 0.008f, 0x66000000)
+    }
+    val detailPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = theme.subtextColor
+        textSize = heightPx * DETAIL_TEXT_HEIGHT_FRACTION
+        typeface = themedTypeface(context, theme, Typeface.NORMAL)
+        setShadowLayer(heightPx * 0.015f, 0f, heightPx * 0.006f, 0x66000000)
+    }
+
+    val titleMaxWidth = (titleRight - left).coerceAtLeast(
+        widthPx * MIN_TITLE_WIDTH_FRACTION,
+    )
+    val naturalTitleWidth = subjectPaint.measureText(item.subject)
+    if (naturalTitleWidth > titleMaxWidth && naturalTitleWidth > 0f) {
+        val fitScale = (titleMaxWidth / naturalTitleWidth)
+            .coerceAtLeast(MIN_SUBJECT_FIT_SCALE)
+        subjectPaint.textSize *= fitScale
+    }
+    val subject = TextUtils.ellipsize(
+        item.subject,
+        subjectPaint,
+        titleMaxWidth,
+        TextUtils.TruncateAt.END,
+    )
+    canvas.drawText(
+        subject.toString(),
+        left,
+        heightPx * SUBJECT_BASELINE_HEIGHT_FRACTION,
+        subjectPaint,
+    )
+
+    var timeWidth = detailPaint.measureText(item.time)
+    val availableDetailWidth = (detailRight - left).coerceAtLeast(1f)
+    val minRoomWidth = widthPx * MIN_DETAIL_WIDTH_FRACTION
+    val detailGap = widthPx * DETAIL_GAP_WIDTH_FRACTION
+    if (item.time.isNotBlank() && timeWidth + minRoomWidth + detailGap > availableDetailWidth) {
+        val fitScale = ((availableDetailWidth - minRoomWidth - detailGap) / timeWidth)
+            .coerceIn(MIN_DETAIL_FIT_SCALE, 1f)
+        detailPaint.textSize *= fitScale
+        timeWidth = detailPaint.measureText(item.time)
+    }
+    val roomMaxWidth = (
+        detailRight - left - timeWidth - detailGap
+    ).coerceAtLeast(minRoomWidth)
+    val room = TextUtils.ellipsize(
+        item.room,
+        detailPaint,
+        roomMaxWidth,
+        TextUtils.TruncateAt.END,
+    )
+    canvas.drawText(
+        room.toString(),
+        left,
+        heightPx * DETAIL_BASELINE_HEIGHT_FRACTION,
+        detailPaint,
+    )
+    if (item.time.isNotBlank()) {
         canvas.drawText(
-            subject.toString(),
-            left,
-            heightPx * SUBJECT_BASELINE_HEIGHT_FRACTION,
-            subjectPaint,
-        )
-
-        var timeWidth = detailPaint.measureText(item.time)
-        val availableDetailWidth = (detailRight - left).coerceAtLeast(1f)
-        val minRoomWidth = widthPx * MIN_DETAIL_WIDTH_FRACTION
-        val detailGap = widthPx * DETAIL_GAP_WIDTH_FRACTION
-        if (item.time.isNotBlank() && timeWidth + minRoomWidth + detailGap > availableDetailWidth) {
-            val fitScale = ((availableDetailWidth - minRoomWidth - detailGap) / timeWidth)
-                .coerceIn(MIN_DETAIL_FIT_SCALE, 1f)
-            detailPaint.textSize *= fitScale
-            timeWidth = detailPaint.measureText(item.time)
-        }
-        val roomMaxWidth = (
-            detailRight - left - timeWidth - detailGap
-        ).coerceAtLeast(minRoomWidth)
-        val room = TextUtils.ellipsize(
-            item.room,
-            detailPaint,
-            roomMaxWidth,
-            TextUtils.TruncateAt.END,
-        )
-        canvas.drawText(
-            room.toString(),
-            left,
+            item.time,
+            detailRight - timeWidth,
             heightPx * DETAIL_BASELINE_HEIGHT_FRACTION,
             detailPaint,
         )
-        if (item.time.isNotBlank()) {
-            canvas.drawText(
-                item.time,
-                detailRight - timeWidth,
-                heightPx * DETAIL_BASELINE_HEIGHT_FRACTION,
-                detailPaint,
-            )
-        }
+    }
 
-        return horizontal
-    
+    return horizontal
 }
 
 internal fun renderWidgetRefreshCover(
@@ -271,10 +271,10 @@ internal fun renderWidgetRefreshCover(
     renderHeightDp: Int,
     themeOverrideKey: String? = null,
 ): Bitmap? {
-    val first = readWidgetClasses(context, widgetId).firstOrNull() ?: return null
+    val current = currentWidgetClass(context, widgetId) ?: return null
     return renderWidgetSlide(
         context,
-        first,
+        current,
         renderWidthDp,
         renderHeightDp,
         themeOverrideKey,
@@ -290,22 +290,17 @@ internal fun renderWidgetTransitionFrame(
     fromThemeKey: String? = null,
     toThemeKey: String? = null,
 ): Bitmap? {
-    val first = readWidgetClasses(context, widgetId).firstOrNull() ?: return null
+    val current = currentWidgetClass(context, widgetId) ?: return null
     val fromKey = fromThemeKey ?: readWidgetTheme(context).key
     val toKey = toThemeKey ?: readWidgetTheme(context).key
-    val oldSharp = renderWidgetSlide(context, first, renderWidthDp, renderHeightDp, fromKey)
-    val sharp = renderWidgetSlide(context, first, renderWidthDp, renderHeightDp, toKey)
+    val oldSharp = renderWidgetSlide(context, current, renderWidthDp, renderHeightDp, fromKey)
+    val sharp = renderWidgetSlide(context, current, renderWidthDp, renderHeightDp, toKey)
     val output = Bitmap.createBitmap(sharp.width, sharp.height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(output)
     val p = progress.coerceIn(0f, 1f)
 
-    // The transition cover must be fully opaque on every frame. Previously the old
-    // card was drawn with low alpha, allowing the launcher's already-refreshed target
-    // RemoteViews to show through and making the two themes appear stacked together.
     canvas.drawBitmap(oldSharp, 0f, 0f, null)
 
-    // Reveal the target with a hard clip/wipe only. Each pixel belongs exclusively to
-    // either the old card or the new card; there is no crossfade between full themes.
     val revealRight = sharp.width * p
     if (revealRight > 0f) {
         val save = canvas.save()
@@ -355,17 +350,17 @@ private fun readWidgetTheme(context: Context): WidgetTheme {
 }
 
 private fun widgetThemeForKey(key: String): WidgetTheme = when (key) {
-        "lol" -> WidgetTheme(key, 0xFF06131A.toInt(), 0xFF0B343A.toInt(), 0xFFF0E6D2.toInt(), 0xFFC8AA6E.toInt())
-        "valorant" -> WidgetTheme(key, 0xFF0F1923.toInt(), 0xFF24313B.toInt(), 0xFFECE8E1.toInt(), 0xFFFF7B86.toInt())
-        "minecraft" -> WidgetTheme(key, 0xFF3A2B20.toInt(), 0xFF6B4A2F.toInt(), 0xFFFFFFFF.toInt(), 0xFFD8D1C9.toInt())
-        "facebook" -> WidgetTheme(key, 0xFFFFFFFF.toInt(), 0xFFE7F3FF.toInt(), 0xFF050505.toInt(), 0xFF65676B.toInt())
-        "shopee" -> WidgetTheme(key, 0xFFEE4D2D.toInt(), 0xFFFF6A3D.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFE9E1.toInt())
-        "tiktok" -> WidgetTheme(key, 0xFF111111.toInt(), 0xFF2A1520.toInt(), 0xFFFFFFFF.toInt(), 0xFF25F4EE.toInt())
-        "ben10" -> WidgetTheme(key, 0xFF101510.toInt(), 0xFF1D5F22.toInt(), 0xFFFFFFFF.toInt(), 0xFF7CFF00.toInt())
-        "youtube" -> WidgetTheme(key, 0xFF181818.toInt(), 0xFF2B0E14.toInt(), 0xFFFFFFFF.toInt(), 0xFFFF8A9F.toInt())
-        "steam" -> WidgetTheme(key, 0xFF171D25.toInt(), 0xFF1B3D55.toInt(), 0xFFD6E9F8.toInt(), 0xFF66C0F4.toInt())
-        else -> WidgetTheme("classic", 0xFF173A8E.toInt(), 0xFF315AB5.toInt(), 0xFFFFFFFF.toInt(), 0xFFDDE8FF.toInt())
-    }
+    "lol" -> WidgetTheme(key, 0xFF06131A.toInt(), 0xFF0B343A.toInt(), 0xFFF0E6D2.toInt(), 0xFFC8AA6E.toInt())
+    "valorant" -> WidgetTheme(key, 0xFF0F1923.toInt(), 0xFF24313B.toInt(), 0xFFECE8E1.toInt(), 0xFFFF7B86.toInt())
+    "minecraft" -> WidgetTheme(key, 0xFF3A2B20.toInt(), 0xFF6B4A2F.toInt(), 0xFFFFFFFF.toInt(), 0xFFD8D1C9.toInt())
+    "facebook" -> WidgetTheme(key, 0xFFFFFFFF.toInt(), 0xFFE7F3FF.toInt(), 0xFF050505.toInt(), 0xFF65676B.toInt())
+    "shopee" -> WidgetTheme(key, 0xFFEE4D2D.toInt(), 0xFFFF6A3D.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFE9E1.toInt())
+    "tiktok" -> WidgetTheme(key, 0xFF111111.toInt(), 0xFF2A1520.toInt(), 0xFFFFFFFF.toInt(), 0xFF25F4EE.toInt())
+    "ben10" -> WidgetTheme(key, 0xFF101510.toInt(), 0xFF1D5F22.toInt(), 0xFFFFFFFF.toInt(), 0xFF7CFF00.toInt())
+    "youtube" -> WidgetTheme(key, 0xFF181818.toInt(), 0xFF2B0E14.toInt(), 0xFFFFFFFF.toInt(), 0xFFFF8A9F.toInt())
+    "steam" -> WidgetTheme(key, 0xFF171D25.toInt(), 0xFF1B3D55.toInt(), 0xFFD6E9F8.toInt(), 0xFF66C0F4.toInt())
+    else -> WidgetTheme("classic", 0xFF173A8E.toInt(), 0xFF315AB5.toInt(), 0xFFFFFFFF.toInt(), 0xFFDDE8FF.toInt())
+}
 
 private fun themedTypeface(context: Context, theme: WidgetTheme, style: Int): Typeface {
     if (theme.key != "minecraft") {
@@ -377,6 +372,19 @@ private fun themedTypeface(context: Context, theme: WidgetTheme, style: Int): Ty
     } catch (_: Exception) {
         Typeface.create(Typeface.MONOSPACE, style)
     }
+}
+
+private fun currentWidgetClass(context: Context, widgetId: Int): WidgetClass? {
+    val items = readWidgetClasses(context, widgetId)
+    if (items.isEmpty()) return null
+    val position = if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+        0
+    } else {
+        context.getSharedPreferences(WIDGET_VISIBLE_POSITION_PREFS, Context.MODE_PRIVATE)
+            .getInt(visiblePositionKey(widgetId), 0)
+            .coerceIn(0, items.lastIndex)
+    }
+    return items.getOrNull(position) ?: items.firstOrNull()
 }
 
 private fun readWidgetClasses(context: Context, widgetId: Int): List<WidgetClass> {
@@ -440,12 +448,6 @@ private fun readWidgetClasses(context: Context, widgetId: Int): List<WidgetClass
             )
         }
 
-        // Index zero is the selected date (today by default). Future dates follow in
-        // ascending order. Older dates are also ascending, so the final item is the
-        // day immediately before the selected date. With loopViews enabled, swiping
-        // backwards from the selected day therefore reaches the previous day.
-        // Keep the complete collection: truncating this list used to remove the most
-        // recent past dates because they intentionally sit at the end for loop order.
         val ordered = allItems.sortedWith(
             Comparator { a, b ->
                 val aGroup = dateGroup(a.dateKey, selectedDate)
@@ -526,6 +528,9 @@ private data class WidgetClass(
     val stableId: Long
         get() = id.hashCode().toLong()
 }
+
+internal const val WIDGET_VISIBLE_POSITION_PREFS = "better_phenikaa_widget_visible_position"
+internal fun visiblePositionKey(widgetId: Int): String = "visible_position_$widgetId"
 
 private const val SNAPSHOT_PREFS = "FlutterSharedPreferences"
 private const val SNAPSHOT_KEY = "flutter.better_phenikaa_snapshot_v1"
