@@ -23,20 +23,18 @@
             android:focusable="false"
             android:scaleType="fitXY" />
 
-        <ListView
+        <StackView
             android:id="@+id/widget_list"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_gravity="center"
+            android:animateFirstView="false"
+            android:clickable="true"
             android:clipChildren="true"
             android:clipToPadding="true"
-            android:divider="@null"
-            android:dividerHeight="0dp"
-            android:fastScrollEnabled="false"
-            android:overScrollMode="never"
-            android:scrollbars="none"
-            android:scrollingCache="true"
-            android:smoothScrollbar="true" />
+            android:inAnimation="@animator/widget_instant_in"
+            android:loopViews="false"
+            android:outAnimation="@animator/widget_instant_out" />
 
         <TextView
             android:id="@+id/widget_empty"
