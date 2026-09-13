@@ -299,39 +299,13 @@ internal fun renderWidgetTransitionFrame(
     val canvas = Canvas(output)
     val p = progress.coerceIn(0f, 1f)
 
-    // RemoteViews/widget builds cannot rely on Paint RenderEffect across all
-    // launcher/API combinations. Approximate a frosted blur with several
-    // translucent offset taps; the sharp card is revealed over it afterwards.
-    val softOffset = (sharp.height * TRANSITION_BLUR_HEIGHT_FRACTION)
-        .coerceIn(2f, 10f)
-    val frostPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-        alpha = 28
-    }
-    val taps = arrayOf(
-        -1f to 0f,
-        1f to 0f,
-        0f to -1f,
-        0f to 1f,
-        -0.7f to -0.7f,
-        0.7f to -0.7f,
-        -0.7f to 0.7f,
-        0.7f to 0.7f,
-    )
-    for ((dx, dy) in taps) {
-        canvas.drawBitmap(oldSharp, dx * softOffset, dy * softOffset, frostPaint)
-    }
-    val frostCenterPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-        alpha = 76
-    }
-    canvas.drawBitmap(oldSharp, 0f, 0f, frostCenterPaint)
+    // The transition cover must be fully opaque on every frame. Previously the old
+    // card was drawn with low alpha, allowing the launcher's already-refreshed target
+    // RemoteViews to show through and making the two themes appear stacked together.
+    canvas.drawBitmap(oldSharp, 0f, 0f, null)
 
-    val theme = widgetThemeForKey(toKey)
-    val veilAlpha = ((1f - p) * 92f).toInt().coerceIn(0, 92)
-    if (veilAlpha > 0) {
-        val veilColor = (theme.startColor and 0x00FFFFFF) or (veilAlpha shl 24)
-        canvas.drawColor(veilColor)
-    }
-
+    // Reveal the target with a hard clip/wipe only. Each pixel belongs exclusively to
+    // either the old card or the new card; there is no crossfade between full themes.
     val revealRight = sharp.width * p
     if (revealRight > 0f) {
         val save = canvas.save()
@@ -558,7 +532,6 @@ private const val SNAPSHOT_KEY = "flutter.better_phenikaa_snapshot_v1"
 private const val THEME_KEY = "flutter.appTheme"
 private const val DATE_PATTERN = "yyyy-MM-dd"
 private const val DATE_TIME_PATTERN = "yyyy-MM-dd'T'HH:mm:ss"
-private const val TRANSITION_BLUR_HEIGHT_FRACTION = 0.075f
 private const val TRANSITION_EDGE_WIDTH_FRACTION = 0.055f
 private const val DEFAULT_WIDGET_WIDTH_DP = 320
 private const val DEFAULT_WIDGET_HEIGHT_DP = 64
