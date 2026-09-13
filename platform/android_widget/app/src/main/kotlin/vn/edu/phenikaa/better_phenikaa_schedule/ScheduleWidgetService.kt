@@ -131,7 +131,12 @@ private class ScheduleWidgetFactory(
     }
 
     private fun rememberVisiblePosition(position: Int) {
-        if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return
+        if (
+            widgetId == AppWidgetManager.INVALID_APPWIDGET_ID ||
+            widgetThemeTransitionActive(context, widgetId)
+        ) {
+            return
+        }
         context.getSharedPreferences(WIDGET_VISIBLE_POSITION_PREFS, Context.MODE_PRIVATE)
             .edit()
             .putInt(visiblePositionKey(widgetId), position)
@@ -387,6 +392,10 @@ private fun currentWidgetClass(context: Context, widgetId: Int): WidgetClass? {
     return items.getOrNull(position) ?: items.firstOrNull()
 }
 
+private fun widgetThemeTransitionActive(context: Context, widgetId: Int): Boolean =
+    context.getSharedPreferences(WIDGET_RENDER_STATE_PREFS, Context.MODE_PRIVATE)
+        .getString("transition_target_$widgetId", null) != null
+
 private fun readWidgetClasses(context: Context, widgetId: Int): List<WidgetClass> {
     val raw = context
         .getSharedPreferences(SNAPSHOT_PREFS, Context.MODE_PRIVATE)
@@ -532,6 +541,7 @@ private data class WidgetClass(
 internal const val WIDGET_VISIBLE_POSITION_PREFS = "better_phenikaa_widget_visible_position"
 internal fun visiblePositionKey(widgetId: Int): String = "visible_position_$widgetId"
 
+private const val WIDGET_RENDER_STATE_PREFS = "better_phenikaa_widget_render_state"
 private const val SNAPSHOT_PREFS = "FlutterSharedPreferences"
 private const val SNAPSHOT_KEY = "flutter.better_phenikaa_snapshot_v1"
 private const val THEME_KEY = "flutter.appTheme"
