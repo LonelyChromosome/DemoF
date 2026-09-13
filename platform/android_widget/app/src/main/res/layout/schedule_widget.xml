@@ -29,12 +29,13 @@
             android:layout_height="match_parent"
             android:layout_gravity="center"
             android:animateFirstView="false"
+            android:animateLayoutChanges="false"
+            android:inAnimation="@animator/widget_instant_in"
+            android:outAnimation="@animator/widget_instant_out"
             android:clickable="true"
             android:clipChildren="true"
             android:clipToPadding="true"
-            android:inAnimation="@animator/widget_instant_in"
-            android:loopViews="false"
-            android:outAnimation="@animator/widget_instant_out" />
+            android:loopViews="true" />
 
         <TextView
             android:id="@+id/widget_empty"
