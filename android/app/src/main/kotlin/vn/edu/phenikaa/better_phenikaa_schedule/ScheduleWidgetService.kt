@@ -281,43 +281,92 @@ internal fun renderWidgetRefreshCover(
     )
 }
 
-internal fun renderWidgetThemeTransitionOverlay(
+internal fun renderWidgetThemeTransitionFrame(
     context: Context,
+    widgetId: Int,
     renderWidthDp: Int,
     renderHeightDp: Int,
     progress: Float,
-    oldThemeKey: String,
-): Bitmap {
-    val density = context.resources.displayMetrics.density
-    val width = (renderWidthDp.coerceAtLeast(1) * density).toInt().coerceAtLeast(1)
-    val height = (renderHeightDp.coerceAtLeast(1) * density).toInt().coerceAtLeast(1)
-    val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    fromThemeKey: String,
+    toThemeKey: String,
+): Bitmap? {
+    val items = readWidgetClasses(context, widgetId)
+    val item = items.getOrNull(widgetTransitionDisplayIndex(context, widgetId))
+        ?: return null
+    val oldSharp = renderWidgetSlide(
+        context,
+        item,
+        renderWidthDp,
+        renderHeightDp,
+        fromThemeKey,
+    )
+    val targetSharp = renderWidgetSlide(
+        context,
+        item,
+        renderWidthDp,
+        renderHeightDp,
+        toThemeKey,
+    )
+    val output = Bitmap.createBitmap(
+        targetSharp.width,
+        targetSharp.height,
+        Bitmap.Config.ARGB_8888,
+    )
     val canvas = Canvas(output)
-    val p = progress.coerceIn(0f, 1f)
-    if (p <= 0f) return output
+    val rawProgress = progress.coerceIn(0f, 1f)
+    val p = rawProgress * rawProgress * (3f - 2f * rawProgress)
 
-    // Keep the real StackView visible beneath this transparent shimmer. The
-    // currently displayed subject therefore survives the entire transition and
-    // the target theme is never painted before the last animation frame.
-    val theme = widgetThemeForKey(oldThemeKey)
+    // Both bitmaps contain the same real class. The provider commits neither the
+    // target preference nor the refreshed collection until this host-visible wipe
+    // has ended, so an empty-day placeholder can never replace the subject midway.
+    canvas.drawBitmap(oldSharp, 0f, 0f, null)
+    val revealRight = targetSharp.width * p
+    if (revealRight > 0f) {
+        val save = canvas.save()
+        canvas.clipRect(0f, 0f, revealRight, targetSharp.height.toFloat())
+        canvas.drawBitmap(targetSharp, 0f, 0f, null)
+        canvas.restoreToCount(save)
+    }
+
+    if (p <= 0f || p >= 1f) {
+        oldSharp.recycle()
+        targetSharp.recycle()
+        return output
+    }
+
+    val theme = widgetThemeForKey(toThemeKey)
     val red = (theme.startColor shr 16) and 0xFF
     val green = (theme.startColor shr 8) and 0xFF
     val blue = theme.startColor and 0xFF
     val luminance = (red * 299 + green * 587 + blue * 114) / 1000
     val effectRgb = if (luminance > 170) 0x000000 else 0xFFFFFF
-    val pulse = if (p <= 0.5f) p * 2f else (1f - p) * 2f
-    val washAlpha = (pulse * TRANSITION_WASH_MAX_ALPHA).toInt().coerceIn(0, 255)
-    if (washAlpha > 0) {
-        canvas.drawColor((washAlpha shl 24) or effectRgb)
-    }
-
-    val bandWidth = (width * TRANSITION_BAND_WIDTH_FRACTION).coerceAtLeast(1f)
-    val center = -bandWidth + p * (width + bandWidth * 2f)
-    val left = (center - bandWidth).coerceAtLeast(0f)
-    val right = (center + bandWidth).coerceAtMost(width.toFloat())
+    val bandWidth = (targetSharp.width * TRANSITION_EDGE_WIDTH_FRACTION)
+        .coerceIn(16f, 72f)
+    val left = (revealRight - bandWidth).coerceAtLeast(0f)
+    val right = (revealRight + bandWidth).coerceAtMost(targetSharp.width.toFloat())
     if (right > left) {
+        val save = canvas.save()
+        canvas.clipRect(left, 0f, right, targetSharp.height.toFloat())
+        val softOffset = (targetSharp.height * TRANSITION_FROST_OFFSET_HEIGHT_FRACTION)
+            .coerceIn(2f, 9f)
+        val frostPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+            alpha = TRANSITION_FROST_TAP_ALPHA
+        }
+        val taps = arrayOf(
+            -1f to 0f,
+            1f to 0f,
+            0f to -1f,
+            0f to 1f,
+            -0.7f to -0.7f,
+            0.7f to 0.7f,
+        )
+        for ((dx, dy) in taps) {
+            canvas.drawBitmap(targetSharp, dx * softOffset, dy * softOffset, frostPaint)
+        }
+        canvas.restoreToCount(save)
+
         val transparent = effectRgb
-        val bright = (TRANSITION_BAND_MAX_ALPHA shl 24) or effectRgb
+        val bright = (TRANSITION_EDGE_ALPHA shl 24) or effectRgb
         val shimmer = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             shader = LinearGradient(
                 left,
@@ -329,9 +378,11 @@ internal fun renderWidgetThemeTransitionOverlay(
                 Shader.TileMode.CLAMP,
             )
         }
-        canvas.drawRect(left, 0f, right, height.toFloat(), shimmer)
+        canvas.drawRect(left, 0f, right, targetSharp.height.toFloat(), shimmer)
     }
 
+    oldSharp.recycle()
+    targetSharp.recycle()
     return output
 }
 
@@ -555,9 +606,10 @@ private const val THEME_KEY = "flutter.appTheme"
 private const val DATE_PATTERN = "yyyy-MM-dd"
 private const val DATE_TIME_PATTERN = "yyyy-MM-dd'T'HH:mm:ss"
 private const val EMPTY_DAY_ID_PREFIX = "empty-day-"
-private const val TRANSITION_WASH_MAX_ALPHA = 18f
-private const val TRANSITION_BAND_MAX_ALPHA = 72
-private const val TRANSITION_BAND_WIDTH_FRACTION = 0.16f
+private const val TRANSITION_FROST_OFFSET_HEIGHT_FRACTION = 0.065f
+private const val TRANSITION_FROST_TAP_ALPHA = 22
+private const val TRANSITION_EDGE_ALPHA = 150
+private const val TRANSITION_EDGE_WIDTH_FRACTION = 0.075f
 private const val DEFAULT_WIDGET_WIDTH_DP = 320
 private const val DEFAULT_WIDGET_HEIGHT_DP = 64
 

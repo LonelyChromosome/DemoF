@@ -75,7 +75,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 .putLong(transitionStartedAtKey(widgetId), System.currentTimeMillis())
                 .remove(transitionReadyKey(widgetId))
                 .apply()
-            runOldThemeTransitionFrame(
+            runVisibleThemeTransitionFrame(
                 context = context,
                 appWidgetManager = appWidgetManager,
                 widgetId = widgetId,
@@ -259,6 +259,11 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         )
         views.setInt(R.id.widget_calendar, "setColorFilter", theme.iconColor)
         views.setTextColor(R.id.widget_empty, theme.textColor)
+        views.setImageViewBitmap(
+            R.id.widget_stack_peek_mask,
+            renderStackPeekMask(context, renderWidthDp, renderHeightDp, theme),
+        )
+        views.setViewVisibility(R.id.widget_stack_peek_mask, View.VISIBLE)
 
         if (showRefreshCover) {
             val cover = if (preferRealClassCover) {
@@ -366,7 +371,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         }, NORMAL_REFRESH_COVER_HOLD_MS)
     }
 
-    private fun runOldThemeTransitionFrame(
+    private fun runVisibleThemeTransitionFrame(
         context: Context,
         appWidgetManager: AppWidgetManager,
         widgetId: Int,
@@ -386,29 +391,26 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             appWidgetManager,
             widgetId,
         ) { widthDp, heightDp ->
-            val oldTheme = themeColorsForKey(fromThemeKey)
+            val transitionCard = renderWidgetThemeTransitionFrame(
+                context = context,
+                widgetId = widgetId,
+                renderWidthDp = widthDp,
+                renderHeightDp = heightDp,
+                progress = progress,
+                fromThemeKey = fromThemeKey,
+                toThemeKey = targetThemeKey,
+            )
             RemoteViews(context.packageName, R.layout.schedule_widget).apply {
-                setImageViewBitmap(
-                    R.id.widget_theme_background,
-                    renderThemeBackground(context, widthDp, heightDp, oldTheme),
-                )
-                setInt(R.id.widget_calendar, "setColorFilter", oldTheme.iconColor)
-                setTextColor(R.id.widget_empty, oldTheme.textColor)
-                setViewVisibility(R.id.widget_list, View.VISIBLE)
-                if (progress <= 0f) {
+                if (transitionCard == null) {
                     setViewVisibility(R.id.widget_refresh_cover, View.GONE)
+                    setViewVisibility(R.id.widget_list, View.VISIBLE)
                 } else {
-                    setImageViewBitmap(
-                        R.id.widget_refresh_cover,
-                        renderWidgetThemeTransitionOverlay(
-                            context,
-                            widthDp,
-                            heightDp,
-                            progress,
-                            fromThemeKey,
-                        ),
-                    )
+                    // The opaque frame contains the same real class in both themes.
+                    // It makes the wipe visible without exposing StackView's cached
+                    // empty row or its neighbouring-card peek during invalidation.
+                    setImageViewBitmap(R.id.widget_refresh_cover, transitionCard)
                     setViewVisibility(R.id.widget_refresh_cover, View.VISIBLE)
+                    setViewVisibility(R.id.widget_list, View.INVISIBLE)
                 }
             }
         }
@@ -416,7 +418,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
 
         if (frame + 1 < TRANSITION_FRAME_COUNT) {
             Handler(Looper.getMainLooper()).postDelayed({
-                runOldThemeTransitionFrame(
+                runVisibleThemeTransitionFrame(
                     context = context,
                     appWidgetManager = appWidgetManager,
                     widgetId = widgetId,
@@ -448,9 +450,9 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             return
         }
 
-        // This is intentionally the first write of the target theme. Every frame
-        // before this point used the old theme and left the live StackView visible,
-        // so the launcher kept the exact subject the user was looking at.
+        // This is intentionally the first persisted write of the target theme.
+        // Before this point an opaque transition card kept the same real subject
+        // visible while the wipe moved from the old palette to the new palette.
         context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(THEME_KEY, targetThemeKey)
@@ -482,6 +484,11 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 )
                 setInt(R.id.widget_calendar, "setColorFilter", targetTheme.iconColor)
                 setTextColor(R.id.widget_empty, targetTheme.textColor)
+                setImageViewBitmap(
+                    R.id.widget_stack_peek_mask,
+                    renderStackPeekMask(context, widthDp, heightDp, targetTheme),
+                )
+                setViewVisibility(R.id.widget_stack_peek_mask, View.VISIBLE)
                 if (cover == null) {
                     setViewVisibility(R.id.widget_refresh_cover, View.GONE)
                     setViewVisibility(R.id.widget_list, View.VISIBLE)
@@ -635,6 +642,44 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         return bitmap
     }
 
+    private fun renderStackPeekMask(
+        context: Context,
+        widthDp: Int,
+        heightDp: Int,
+        theme: ThemeColors,
+    ): Bitmap {
+        val density = context.resources.displayMetrics.density
+        val width = (widthDp.coerceAtLeast(1) * density).roundToInt().coerceAtLeast(1)
+        val height = (heightDp.coerceAtLeast(1) * density).roundToInt().coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val edge = (height * PEEK_MASK_HEIGHT_FRACTION)
+            .roundToInt()
+            .coerceIn(1, maxOf(1, height / 4))
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(
+                0f,
+                0f,
+                width.toFloat(),
+                0f,
+                theme.startColor,
+                theme.endColor,
+                Shader.TileMode.CLAMP,
+            )
+        }
+        val canvas = Canvas(bitmap)
+        canvas.drawRect(0f, 0f, width.toFloat(), edge.toFloat(), paint)
+        canvas.drawRect(0f, (height - edge).toFloat(), width.toFloat(), height.toFloat(), paint)
+        canvas.drawRect(0f, edge.toFloat(), edge.toFloat(), (height - edge).toFloat(), paint)
+        canvas.drawRect(
+            (width - edge).toFloat(),
+            edge.toFloat(),
+            width.toFloat(),
+            (height - edge).toFloat(),
+            paint,
+        )
+        return bitmap
+    }
+
     private fun collectionContentToken(
         context: Context,
         widgetId: Int,
@@ -723,9 +768,9 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
 
         private const val DATE_PICKER_REQUEST_CODE_BASE = 100_000
         private const val MAX_EXACT_LAYOUTS = 16
-        private const val TRANSITION_FRAME_COUNT = 8
-        private const val TRANSITION_FRAME_DELAY_MS = 62L
-        private const val TRANSITION_FINAL_HOLD_MS = 80L
+        private const val TRANSITION_FRAME_COUNT = 10
+        private const val TRANSITION_FRAME_DELAY_MS = 105L
+        private const val TRANSITION_FINAL_HOLD_MS = 160L
         private const val TARGET_COLLECTION_SETTLE_MS = 220L
         private const val TARGET_COLLECTION_FALLBACK_MS = 1_800L
         private const val NORMAL_REFRESH_COVER_HOLD_MS = 1_600L
@@ -733,6 +778,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         private const val CALENDAR_HEIGHT_FRACTION = 0.42f
         private const val CALENDAR_WIDTH_FRACTION = 0.085f
         private const val CALENDAR_PADDING_FRACTION = 0.19f
+        private const val PEEK_MASK_HEIGHT_FRACTION = 0.09f
         private const val DEFAULT_WIDGET_WIDTH_DP = 320
         private const val DEFAULT_WIDGET_HEIGHT_DP = 64
     }

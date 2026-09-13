@@ -10,7 +10,7 @@ void main() {
   const packagePath =
       'kotlin/vn/edu/phenikaa/better_phenikaa_schedule';
 
-  test('theme transition keeps the live old-theme card until its last frame', () {
+  test('theme transition starts only after Home can become visible', () {
     final mainActivity = _read('$platformRoot/$packagePath/MainActivity.kt');
     final provider = _read(
       '$platformRoot/$packagePath/ScheduleWidgetProvider.kt',
@@ -19,12 +19,19 @@ void main() {
       '$platformRoot/$packagePath/ScheduleWidgetService.kt',
     );
 
-    expect(mainActivity, contains('beginThemeTransition'));
-    expect(provider, contains('runOldThemeTransitionFrame'));
-    expect(provider, contains('renderWidgetThemeTransitionOverlay'));
-    expect(provider, contains('setViewVisibility(R.id.widget_list, View.VISIBLE)'));
+    expect(mainActivity, contains('pendingThemeTransition'));
+    expect(mainActivity, contains('override fun onStop()'));
+    expect(mainActivity, contains('HOME_REVEAL_GRACE_MS'));
+    expect(
+      mainActivity.indexOf('override fun onStop()'),
+      lessThan(mainActivity.lastIndexOf('beginThemeTransition')),
+    );
+    expect(provider, contains('runVisibleThemeTransitionFrame'));
+    expect(provider, contains('renderWidgetThemeTransitionFrame'));
+    expect(provider, contains('setViewVisibility(R.id.widget_list, View.INVISIBLE)'));
     expect(provider, contains('commitTargetThemeAndRefresh'));
-    expect(service, isNot(contains('renderWidgetTransitionFrame')));
+    expect(service, contains('renderWidgetThemeTransitionFrame'));
+    expect(service, isNot(contains('renderWidgetThemeTransitionOverlay')));
   });
 
   test('transition cover prefers a real class over an empty-day placeholder', () {
@@ -37,6 +44,8 @@ void main() {
 
     expect(service, contains('widgetTransitionDisplayIndex'));
     expect(service, contains('!it.id.startsWith(EMPTY_DAY_ID_PREFIX)'));
+    expect(service, contains('val oldSharp = renderWidgetSlide'));
+    expect(service, contains('val targetSharp = renderWidgetSlide'));
     expect(provider, contains('renderWidgetTransitionCover'));
     expect(provider, contains('setDisplayedChild'));
     expect(provider, contains('TARGET_COLLECTION_FALLBACK_MS'));
@@ -70,8 +79,15 @@ void main() {
     );
     expect(layout, contains('android:loopViews="true"'));
     expect(layout, contains('android:id="@+id/widget_stack_peek_mask"'));
-    expect(layout, contains('android:layout_width="1dp"'));
-    expect(layout, contains('android:visibility="gone"'));
+    final peekMask = layout.substring(
+      layout.indexOf('android:id="@+id/widget_stack_peek_mask"'),
+      layout.indexOf('android:id="@+id/widget_calendar"'),
+    );
+    expect(peekMask, contains('android:layout_width="match_parent"'));
+    expect(peekMask, contains('android:layout_height="match_parent"'));
+    expect(peekMask, isNot(contains('android:visibility="gone"')));
+    expect(provider, contains('renderStackPeekMask'));
+    expect(provider, contains('PEEK_MASK_HEIGHT_FRACTION'));
     expect(
       layout.indexOf('android:id="@+id/widget_empty"'),
       lessThan(layout.indexOf('android:id="@+id/widget_refresh_cover"')),

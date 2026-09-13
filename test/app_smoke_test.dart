@@ -9,7 +9,7 @@ void main() {
     await tester.pumpWidget(const BetterPhenikaaScheduleApp());
 
     expect(find.text('Better Phenikaa App'), findsOneWidget);
-    expect(find.text('2.1.0'), findsOneWidget);
+    expect(find.text('2.1.1'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 700));
     await tester.pumpAndSettle();
 
