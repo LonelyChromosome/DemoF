@@ -1,4 +1,4 @@
-name: Build Better Phenikaa App 2.1.2
+name: Build Better Phenikaa App 2.1.3
 
 on:
   workflow_dispatch:
@@ -46,16 +46,16 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk \
-            dist/Better_Phenikaa_App_2.1.2.apk
-          sha256sum dist/Better_Phenikaa_App_2.1.2.apk \
-            > dist/Better_Phenikaa_App_2.1.2.sha256
-          test -s dist/Better_Phenikaa_App_2.1.2.apk
+            dist/Better_Phenikaa_App_2.1.3.apk
+          sha256sum dist/Better_Phenikaa_App_2.1.3.apk \
+            > dist/Better_Phenikaa_App_2.1.3.sha256
+          test -s dist/Better_Phenikaa_App_2.1.3.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Better-Phenikaa-App-2.1.2
+          name: Better-Phenikaa-App-2.1.3
           path: |
-            dist/Better_Phenikaa_App_2.1.2.apk
-            dist/Better_Phenikaa_App_2.1.2.sha256
+            dist/Better_Phenikaa_App_2.1.3.apk
+            dist/Better_Phenikaa_App_2.1.3.sha256
           retention-days: 14

@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.SizeF
 import android.util.TypedValue
 import android.view.View
@@ -83,6 +84,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 fromThemeKey = displayedThemeKey,
                 targetThemeKey = targetThemeKey,
                 frame = 0,
+                startedAtUptimeMs = 0L,
             )
         }
     }
@@ -380,14 +382,27 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         fromThemeKey: String,
         targetThemeKey: String,
         frame: Int,
+        startedAtUptimeMs: Long,
     ) {
         val state = context.getSharedPreferences(WIDGET_RENDER_STATE_PREFS, Context.MODE_PRIVATE)
         if (state.getString(transitionTargetKey(widgetId), null) != targetThemeKey) {
             return
         }
 
-        val denominator = (TRANSITION_FRAME_COUNT - 1).coerceAtLeast(1)
-        val progress = frame.toFloat() / denominator.toFloat()
+        val lastFrame = (TRANSITION_FRAME_COUNT - 1).coerceAtLeast(0)
+        val elapsedFrame = if (startedAtUptimeMs > 0L) {
+            (
+                (SystemClock.uptimeMillis() - startedAtUptimeMs).coerceAtLeast(0L) /
+                    TRANSITION_FRAME_DELAY_MS
+            ).toInt()
+        } else {
+            frame
+        }
+        // Stay on a fixed 33 ms clock. If rendering or the launcher stalls, skip
+        // an overdue intermediate frame instead of extending the 0.5 s animation.
+        val visibleFrame = maxOf(frame, elapsedFrame).coerceAtMost(lastFrame)
+        val denominator = lastFrame.coerceAtLeast(1)
+        val progress = visibleFrame.toFloat() / denominator.toFloat()
         val frameViews = buildSizeAwareViews(
             context,
             appWidgetManager,
@@ -418,17 +433,28 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         }
         appWidgetManager.partiallyUpdateAppWidget(widgetId, frameViews)
 
-        if (frame + 1 < TRANSITION_FRAME_COUNT) {
-            Handler(Looper.getMainLooper()).postDelayed({
+        // Frame zero creates and caches the two complete theme cards. Start the
+        // animation clock only after that one-time preparation has finished.
+        val clockOrigin = if (startedAtUptimeMs > 0L) {
+            startedAtUptimeMs
+        } else {
+            SystemClock.uptimeMillis()
+        }
+        if (visibleFrame < lastFrame) {
+            val nextFrame = visibleFrame + 1
+            val nextFrameAtUptimeMs =
+                clockOrigin + nextFrame.toLong() * TRANSITION_FRAME_DELAY_MS
+            Handler(Looper.getMainLooper()).postAtTime({
                 runVisibleThemeTransitionFrame(
                     context = context,
                     appWidgetManager = appWidgetManager,
                     widgetId = widgetId,
                     fromThemeKey = fromThemeKey,
                     targetThemeKey = targetThemeKey,
-                    frame = frame + 1,
+                    frame = nextFrame,
+                    startedAtUptimeMs = clockOrigin,
                 )
-            }, TRANSITION_FRAME_DELAY_MS)
+            }, nextFrameAtUptimeMs)
         } else {
             Handler(Looper.getMainLooper()).postDelayed({
                 commitTargetThemeAndRefresh(
@@ -772,9 +798,9 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
 
         private const val DATE_PICKER_REQUEST_CODE_BASE = 100_000
         private const val MAX_EXACT_LAYOUTS = 16
-        private const val TRANSITION_FRAME_COUNT = 24
-        private const val TRANSITION_FRAME_DELAY_MS = 42L
-        private const val TRANSITION_FINAL_HOLD_MS = 100L
+        private const val TRANSITION_FRAME_COUNT = 16
+        private const val TRANSITION_FRAME_DELAY_MS = 33L
+        private const val TRANSITION_FINAL_HOLD_MS = 0L
         private const val TARGET_COLLECTION_SETTLE_MS = 220L
         private const val TARGET_COLLECTION_FALLBACK_MS = 1_800L
         private const val NORMAL_REFRESH_COVER_HOLD_MS = 1_600L

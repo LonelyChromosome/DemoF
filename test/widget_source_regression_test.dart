@@ -42,8 +42,12 @@ void main() {
       '$platformRoot/$packagePath/ScheduleWidgetService.kt',
     );
 
-    expect(provider, contains('TRANSITION_FRAME_COUNT = 24'));
-    expect(provider, contains('TRANSITION_FRAME_DELAY_MS = 42L'));
+    expect(provider, contains('TRANSITION_FRAME_COUNT = 16'));
+    expect(provider, contains('TRANSITION_FRAME_DELAY_MS = 33L'));
+    expect(provider, contains('TRANSITION_FINAL_HOLD_MS = 0L'));
+    expect(provider, contains('SystemClock.uptimeMillis()'));
+    expect(provider, contains('postAtTime'));
+    expect(provider, contains('val visibleFrame ='));
     expect(service, contains('themeTransitionFrameCache'));
     expect(service, contains('obtainThemeTransitionFrameSource'));
     expect(provider, contains('clearWidgetThemeTransitionFrameCache'));
