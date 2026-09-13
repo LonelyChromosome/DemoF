@@ -31,12 +31,11 @@
             android:clickable="true"
             android:clipChildren="true"
             android:clipToPadding="true"
-            android:columnWidth="match_parent"
             android:horizontalSpacing="0dp"
             android:numColumns="1"
             android:overScrollMode="never"
             android:scrollbars="none"
-            android:stretchMode="none"
+            android:stretchMode="columnWidth"
             android:verticalSpacing="0dp" />
 
         <TextView
