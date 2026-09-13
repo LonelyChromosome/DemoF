@@ -59,8 +59,10 @@ void main() {
 
     expect(service, contains('widgetTransitionDisplayIndex'));
     expect(service, contains('!it.id.startsWith(EMPTY_DAY_ID_PREFIX)'));
-    expect(service, contains('val oldSharp = renderWidgetSlide'));
-    expect(service, contains('val targetSharp = renderWidgetSlide'));
+    expect(service, contains('oldSharp = renderWidgetSlide'));
+    expect(service, contains('targetSharp = renderWidgetSlide'));
+    expect(service, contains('val oldSharp = source.oldSharp'));
+    expect(service, contains('val targetSharp = source.targetSharp'));
     expect(provider, contains('renderWidgetTransitionCover'));
     expect(provider, contains('setDisplayedChild'));
     expect(provider, contains('TARGET_COLLECTION_FALLBACK_MS'));
