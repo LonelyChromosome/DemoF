@@ -63,6 +63,9 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
     ) {
         val state = context.getSharedPreferences(WIDGET_RENDER_STATE_PREFS, Context.MODE_PRIVATE)
         widgetIds.forEach { widgetId ->
+            // Keep the exact currently visible collection item on screen. Do not build
+            // a synthetic cover from item 0: that was the source of the brief
+            // "Không có lịch học" reset when the user had swiped to another class.
             val keepCurrent = RemoteViews(context.packageName, R.layout.schedule_widget)
             keepCurrent.setFloat(R.id.widget_root, "setAlpha", 1f)
             keepCurrent.setViewVisibility(R.id.widget_refresh_cover, View.GONE)
@@ -92,6 +95,8 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 .putString(transitionFromKey(widgetId), oldThemeKey)
                 .putString(transitionPhaseKey(widgetId), PHASE_FADING_OUT)
                 .apply()
+            // Fade the actual current widget as one surface. Only after it is fully
+            // invisible do we refresh the collection for the target theme.
             runFadeOut(context, widgetId, targetThemeKey, 0)
         }
     }
@@ -122,6 +127,8 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         val themeKey = readThemeColors(context).key
         val previousThemeKey = renderStatePrefs.getString(themeTokenKey(widgetId), null)
         val themeChanged = previousThemeKey != themeKey
+        // A theme transition owns its own fade. Never start the generic refresh cover
+        // during that transition, otherwise item zero can flash over the current item.
         val showRefreshCover = collectionChanged && !hasActiveThemeTransition(renderStatePrefs, widgetId)
 
         val views = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -308,10 +315,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 Context.MODE_PRIVATE,
             )
             if (selectionPrefs.getBoolean(resetChildKey(widgetId), false)) {
-                context.getSharedPreferences(WIDGET_VISIBLE_POSITION_PREFS, Context.MODE_PRIVATE)
-                    .edit()
-                    .putInt(visiblePositionKey(widgetId), 0)
-                    .apply()
                 views.setScrollPosition(R.id.widget_list, 0)
                 selectionPrefs.edit().remove(resetChildKey(widgetId)).apply()
             }
@@ -403,19 +406,11 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             return
         }
 
-        val savedPosition = context
-            .getSharedPreferences(WIDGET_VISIBLE_POSITION_PREFS, Context.MODE_PRIVATE)
-            .getInt(visiblePositionKey(widgetId), 0)
-            .coerceAtLeast(0)
-        val restore = RemoteViews(context.packageName, R.layout.schedule_widget)
-        restore.setFloat(R.id.widget_root, "setAlpha", 0f)
-        restore.setScrollPosition(R.id.widget_list, savedPosition)
-        AppWidgetManager.getInstance(context).partiallyUpdateAppWidget(widgetId, restore)
-
+        // Do not force the collection back to position 0. ListView keeps its current
+        // vertical position across notifyDataSetChanged, so the same class/date stays
+        // selected while the theme changes.
         state.edit().putString(transitionPhaseKey(widgetId), PHASE_FADING_IN).apply()
-        Handler(Looper.getMainLooper()).postDelayed({
-            runFadeIn(context, widgetId, readyThemeKey, 0)
-        }, POSITION_RESTORE_SETTLE_MS)
+        runFadeIn(context, widgetId, readyThemeKey, 0)
     }
 
     private fun runFadeIn(
@@ -597,7 +592,6 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         private const val TRANSITION_FRAME_COUNT = 8
         private const val TRANSITION_FRAME_DELAY_MS = 36L
         private const val TARGET_READY_FALLBACK_MS = 280L
-        private const val POSITION_RESTORE_SETTLE_MS = 90L
         private const val CALENDAR_HEIGHT_FRACTION = 0.42f
         private const val CALENDAR_WIDTH_FRACTION = 0.085f
         private const val CALENDAR_PADDING_FRACTION = 0.19f
