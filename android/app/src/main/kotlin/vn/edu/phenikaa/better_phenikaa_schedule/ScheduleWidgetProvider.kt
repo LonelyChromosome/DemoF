@@ -63,6 +63,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
     ) {
         val state = context.getSharedPreferences(WIDGET_RENDER_STATE_PREFS, Context.MODE_PRIVATE)
         widgetIds.forEach { widgetId ->
+            clearWidgetThemeTransitionFrameCache(widgetId)
             // A widget can still be finishing an earlier switch when the user taps
             // another theme. Its own rendered theme is more accurate than the single
             // global preference in that case.
@@ -126,6 +127,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
                 .remove(transitionReadyKey(widgetId))
                 .remove(transitionDisplayIndexKey(widgetId))
                 .apply()
+            clearWidgetThemeTransitionFrameCache(widgetId)
         }
         val contentToken = collectionContentToken(context, widgetId, options)
         val previousToken = renderStatePrefs.getString(contentTokenKey(widgetId), null)
@@ -449,6 +451,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         if (state.getString(transitionTargetKey(widgetId), null) != targetThemeKey) {
             return
         }
+        clearWidgetThemeTransitionFrameCache(widgetId)
 
         // This is intentionally the first persisted write of the target theme.
         // Before this point an opaque transition card kept the same real subject
@@ -559,6 +562,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             .remove(transitionReadyKey(widgetId))
             .remove(transitionDisplayIndexKey(widgetId))
             .apply()
+        clearWidgetThemeTransitionFrameCache(widgetId)
     }
 
     private fun buildSizeAwareViews(
@@ -768,9 +772,9 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
 
         private const val DATE_PICKER_REQUEST_CODE_BASE = 100_000
         private const val MAX_EXACT_LAYOUTS = 16
-        private const val TRANSITION_FRAME_COUNT = 10
-        private const val TRANSITION_FRAME_DELAY_MS = 105L
-        private const val TRANSITION_FINAL_HOLD_MS = 160L
+        private const val TRANSITION_FRAME_COUNT = 24
+        private const val TRANSITION_FRAME_DELAY_MS = 42L
+        private const val TRANSITION_FINAL_HOLD_MS = 100L
         private const val TARGET_COLLECTION_SETTLE_MS = 220L
         private const val TARGET_COLLECTION_FALLBACK_MS = 1_800L
         private const val NORMAL_REFRESH_COVER_HOLD_MS = 1_600L

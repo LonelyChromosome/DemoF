@@ -281,6 +281,92 @@ internal fun renderWidgetRefreshCover(
     )
 }
 
+private data class ThemeTransitionFrameKey(
+    val widgetId: Int,
+    val renderWidthDp: Int,
+    val renderHeightDp: Int,
+    val fromThemeKey: String,
+    val toThemeKey: String,
+)
+
+private data class ThemeTransitionFrameSource(
+    val oldSharp: Bitmap,
+    val targetSharp: Bitmap,
+)
+
+private val themeTransitionFrameCache =
+    LinkedHashMap<ThemeTransitionFrameKey, ThemeTransitionFrameSource>()
+
+private fun obtainThemeTransitionFrameSource(
+    context: Context,
+    widgetId: Int,
+    renderWidthDp: Int,
+    renderHeightDp: Int,
+    fromThemeKey: String,
+    toThemeKey: String,
+): ThemeTransitionFrameSource? = synchronized(themeTransitionFrameCache) {
+    val key = ThemeTransitionFrameKey(
+        widgetId,
+        renderWidthDp,
+        renderHeightDp,
+        fromThemeKey,
+        toThemeKey,
+    )
+    val cached = themeTransitionFrameCache[key]
+    if (cached != null && !cached.oldSharp.isRecycled && !cached.targetSharp.isRecycled) {
+        return@synchronized cached
+    }
+    themeTransitionFrameCache.remove(key)
+    cached?.let {
+        if (!it.oldSharp.isRecycled) it.oldSharp.recycle()
+        if (!it.targetSharp.isRecycled) it.targetSharp.recycle()
+    }
+
+    val items = readWidgetClasses(context, widgetId)
+    val realClassIndex = items.indexOfFirst { !it.id.startsWith(EMPTY_DAY_ID_PREFIX) }
+    val item = items.getOrNull(if (realClassIndex >= 0) realClassIndex else 0)
+        ?: return@synchronized null
+    val source = ThemeTransitionFrameSource(
+        oldSharp = renderWidgetSlide(
+            context,
+            item,
+            renderWidthDp,
+            renderHeightDp,
+            fromThemeKey,
+        ),
+        targetSharp = renderWidgetSlide(
+            context,
+            item,
+            renderWidthDp,
+            renderHeightDp,
+            toThemeKey,
+        ),
+    )
+    themeTransitionFrameCache[key] = source
+    while (themeTransitionFrameCache.size > MAX_TRANSITION_FRAME_SOURCE_CACHE) {
+        val iterator = themeTransitionFrameCache.entries.iterator()
+        if (!iterator.hasNext()) break
+        val expired = iterator.next().value
+        iterator.remove()
+        expired.oldSharp.recycle()
+        expired.targetSharp.recycle()
+    }
+    source
+}
+
+internal fun clearWidgetThemeTransitionFrameCache(widgetId: Int) {
+    synchronized(themeTransitionFrameCache) {
+        val iterator = themeTransitionFrameCache.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (entry.key.widgetId != widgetId) continue
+            iterator.remove()
+            entry.value.oldSharp.recycle()
+            entry.value.targetSharp.recycle()
+        }
+    }
+}
+
 internal fun renderWidgetThemeTransitionFrame(
     context: Context,
     widgetId: Int,
@@ -290,23 +376,16 @@ internal fun renderWidgetThemeTransitionFrame(
     fromThemeKey: String,
     toThemeKey: String,
 ): Bitmap? {
-    val items = readWidgetClasses(context, widgetId)
-    val item = items.getOrNull(widgetTransitionDisplayIndex(context, widgetId))
-        ?: return null
-    val oldSharp = renderWidgetSlide(
+    val source = obtainThemeTransitionFrameSource(
         context,
-        item,
+        widgetId,
         renderWidthDp,
         renderHeightDp,
         fromThemeKey,
-    )
-    val targetSharp = renderWidgetSlide(
-        context,
-        item,
-        renderWidthDp,
-        renderHeightDp,
         toThemeKey,
-    )
+    ) ?: return null
+    val oldSharp = source.oldSharp
+    val targetSharp = source.targetSharp
     val output = Bitmap.createBitmap(
         targetSharp.width,
         targetSharp.height,
@@ -329,8 +408,6 @@ internal fun renderWidgetThemeTransitionFrame(
     }
 
     if (p <= 0f || p >= 1f) {
-        oldSharp.recycle()
-        targetSharp.recycle()
         return output
     }
 
@@ -381,8 +458,6 @@ internal fun renderWidgetThemeTransitionFrame(
         canvas.drawRect(left, 0f, right, targetSharp.height.toFloat(), shimmer)
     }
 
-    oldSharp.recycle()
-    targetSharp.recycle()
     return output
 }
 
@@ -610,6 +685,7 @@ private const val TRANSITION_FROST_OFFSET_HEIGHT_FRACTION = 0.065f
 private const val TRANSITION_FROST_TAP_ALPHA = 22
 private const val TRANSITION_EDGE_ALPHA = 150
 private const val TRANSITION_EDGE_WIDTH_FRACTION = 0.075f
+private const val MAX_TRANSITION_FRAME_SOURCE_CACHE = 8
 private const val DEFAULT_WIDGET_WIDTH_DP = 320
 private const val DEFAULT_WIDGET_HEIGHT_DP = 64
 

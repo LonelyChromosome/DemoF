@@ -34,6 +34,21 @@ void main() {
     expect(service, isNot(contains('renderWidgetThemeTransitionOverlay')));
   });
 
+  test('theme transition keeps a smooth cached frame cadence', () {
+    final provider = _read(
+      '$platformRoot/$packagePath/ScheduleWidgetProvider.kt',
+    );
+    final service = _read(
+      '$platformRoot/$packagePath/ScheduleWidgetService.kt',
+    );
+
+    expect(provider, contains('TRANSITION_FRAME_COUNT = 24'));
+    expect(provider, contains('TRANSITION_FRAME_DELAY_MS = 42L'));
+    expect(service, contains('themeTransitionFrameCache'));
+    expect(service, contains('obtainThemeTransitionFrameSource'));
+    expect(provider, contains('clearWidgetThemeTransitionFrameCache'));
+  });
+
   test('transition cover prefers a real class over an empty-day placeholder', () {
     final provider = _read(
       '$platformRoot/$packagePath/ScheduleWidgetProvider.kt',
