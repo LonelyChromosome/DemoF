@@ -164,14 +164,20 @@ text = re.sub(
 )
 text = re.sub(
     r'android:icon="[^"]*"',
-    'android:icon="@drawable/ic_launcher_better_phenikaa"',
+    'android:icon="@mipmap/ic_launcher"',
+    text,
+    count=1,
+)
+text = re.sub(
+    r'android:roundIcon="[^"]*"',
+    'android:roundIcon="@mipmap/ic_launcher_round"',
     text,
     count=1,
 )
 if 'android:roundIcon=' not in text:
     text = text.replace(
-        'android:icon="@drawable/ic_launcher_better_phenikaa"',
-        'android:icon="@drawable/ic_launcher_better_phenikaa"\n        android:roundIcon="@drawable/ic_launcher_better_phenikaa"',
+        'android:icon="@mipmap/ic_launcher"',
+        'android:icon="@mipmap/ic_launcher"\n        android:roundIcon="@mipmap/ic_launcher_round"',
         1,
     )
 if 'android:allowBackup=' not in text:
