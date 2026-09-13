@@ -18,19 +18,19 @@
         android:focusable="false"
         android:scaleType="fitXY" />
 
-    <StackView
+    <ListView
         android:id="@+id/widget_list"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="center"
-        android:animateFirstView="false"
-        android:animateLayoutChanges="false"
-        android:inAnimation="@animator/widget_instant_in"
-        android:outAnimation="@animator/widget_instant_out"
         android:clickable="true"
         android:clipChildren="true"
         android:clipToPadding="true"
-        android:loopViews="true" />
+        android:divider="@null"
+        android:dividerHeight="0dp"
+        android:overScrollMode="never"
+        android:scrollbars="none"
+        android:verticalFadingEdge="false" />
 
     <TextView
         android:id="@+id/widget_empty"
@@ -44,13 +44,6 @@
         android:textSize="14sp"
         android:textStyle="bold" />
 
-    <!--
-      Atomic refresh cover. During collection/theme invalidation Samsung Launcher can
-      briefly lay out several StackView children at once. The provider puts a fully
-      rendered first card here before invalidating the collection, then hides it only
-      after the refreshed stack is stable. This prevents both overlapping text and
-      the old peek/edge artifacts without disabling swipe navigation.
-    -->
     <ImageView
         android:id="@+id/widget_refresh_cover"
         android:layout_width="match_parent"
