@@ -23,7 +23,7 @@
             android:focusable="false"
             android:scaleType="fitXY" />
 
-        <ListView
+        <GridView
             android:id="@+id/widget_list"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -31,10 +31,13 @@
             android:clickable="true"
             android:clipChildren="true"
             android:clipToPadding="true"
-            android:divider="@null"
-            android:dividerHeight="0dp"
+            android:columnWidth="match_parent"
+            android:horizontalSpacing="0dp"
+            android:numColumns="1"
             android:overScrollMode="never"
-            android:scrollbars="none" />
+            android:scrollbars="none"
+            android:stretchMode="none"
+            android:verticalSpacing="0dp" />
 
         <TextView
             android:id="@+id/widget_empty"
