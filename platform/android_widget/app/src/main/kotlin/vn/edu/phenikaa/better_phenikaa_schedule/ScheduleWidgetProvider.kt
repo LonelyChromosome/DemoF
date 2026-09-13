@@ -356,10 +356,8 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         widgetId: Int,
         readyThemeKey: String,
     ) {
-        // The collection service can finish while the app is still covering Home.
-        // Keep the single bitmap cover in front until the launcher has had time to
-        // settle its hidden StackView, then reveal the new card with a deliberate
-        // left-to-right frosted wipe. Stale theme callbacks are ignored.
+        // Keep the old-theme bitmap fully visible until the target collection is ready.
+        // The new theme is only committed visually when the transition has completed.
         if (readyThemeKey != readThemeColors(context).key) {
             return
         }
@@ -405,18 +403,10 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         }
         val denominator = (TRANSITION_FRAME_COUNT - 1).coerceAtLeast(1)
         val progress = frame.toFloat() / denominator.toFloat()
-        if (frame == 0) {
-            val targetTheme = themeColorsForKey(readyThemeKey)
-            val prep = RemoteViews(context.packageName, R.layout.schedule_widget)
-            prep.setImageViewBitmap(
-                R.id.widget_theme_background,
-                renderThemeBackground(context, widthDp, heightDp, targetTheme),
-            )
-            prep.setInt(R.id.widget_calendar, "setColorFilter", targetTheme.iconColor)
-            prep.setViewVisibility(R.id.widget_list, View.INVISIBLE)
-            prep.setViewVisibility(R.id.widget_refresh_cover, View.VISIBLE)
-            AppWidgetManager.getInstance(context).partiallyUpdateAppWidget(widgetId, prep)
-        }
+
+        // IMPORTANT: never switch widget_theme_background or calendar tint here.
+        // During every animation frame the real RemoteViews underneath remains the
+        // old theme. Only the opaque transition bitmap is allowed to change.
         val bitmap = renderWidgetTransitionFrame(
             context,
             widgetId,
@@ -427,7 +417,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             readyThemeKey,
         )
         if (bitmap == null) {
-            finishRevealTransition(context, widgetId, readyThemeKey)
+            finishRevealTransition(context, widgetId, readyThemeKey, widthDp, heightDp)
             return
         }
 
@@ -452,7 +442,7 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
             }, TRANSITION_FRAME_DELAY_MS)
         } else {
             Handler(Looper.getMainLooper()).postDelayed({
-                finishRevealTransition(context, widgetId, readyThemeKey)
+                finishRevealTransition(context, widgetId, readyThemeKey, widthDp, heightDp)
             }, TRANSITION_FINAL_HOLD_MS)
         }
     }
@@ -461,11 +451,22 @@ class ScheduleWidgetProvider : HomeWidgetProvider() {
         context: Context,
         widgetId: Int,
         readyThemeKey: String,
+        widthDp: Int,
+        heightDp: Int,
     ) {
         if (readyThemeKey != readThemeColors(context).key) {
             return
         }
+        val targetTheme = themeColorsForKey(readyThemeKey)
         val reveal = RemoteViews(context.packageName, R.layout.schedule_widget)
+        // Atomically swap the real widget to the target theme only after the final
+        // animation frame. This prevents old/new RemoteViews from being visible together.
+        reveal.setImageViewBitmap(
+            R.id.widget_theme_background,
+            renderThemeBackground(context, widthDp, heightDp, targetTheme),
+        )
+        reveal.setInt(R.id.widget_calendar, "setColorFilter", targetTheme.iconColor)
+        reveal.setTextColor(R.id.widget_empty, targetTheme.textColor)
         reveal.setViewVisibility(R.id.widget_list, View.VISIBLE)
         reveal.setViewVisibility(R.id.widget_refresh_cover, View.GONE)
         AppWidgetManager.getInstance(context)
