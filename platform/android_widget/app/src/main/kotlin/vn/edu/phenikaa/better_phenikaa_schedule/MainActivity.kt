@@ -35,9 +35,14 @@ class MainActivity : FlutterActivity() {
                 // this cover, so returning Home can only show the previous theme.
                 provider.stageThemeTransition(this, manager, widgetIds, oldTheme, theme)
                 Handler(Looper.getMainLooper()).postDelayed({
-                    // Phase 2: only now switch the widget theme source and rebuild the
-                    // hidden collection. The ready callback starts the wipe later.
+                    // Phase 2: switch the data source only after the old-theme cover
+                    // has landed. Some launchers (notably MIUI/HyperOS on Android 15)
+                    // may redraw the widget when the backing preference changes, so
+                    // immediately re-assert the old-theme cover before refreshing the
+                    // hidden collection. This prevents the target theme from leaking
+                    // through and visually stacking under the transition.
                     prefs.edit().putString(THEME_KEY, theme).commit()
+                    provider.stageThemeTransition(this, manager, widgetIds, oldTheme, theme)
                     provider.refreshHiddenCollection(this, manager, widgetIds, oldTheme, theme)
                 }, THEME_FREEZE_SETTLE_MS)
             } else if (oldTheme != theme) {
