@@ -17,6 +17,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        configureDailySyncChannel(flutterEngine)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             WIDGET_THEME_CHANNEL,
@@ -110,7 +111,27 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun configureDailySyncChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            DAILY_SYNC_CHANNEL,
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "enable" -> {
+                    val delayMillis = DailySyncScheduler.enable(applicationContext)
+                    result.success(delayMillis)
+                }
+                "disable" -> {
+                    DailySyncScheduler.disable(applicationContext)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
     companion object {
+        private const val DAILY_SYNC_CHANNEL = "better_phenikaa/daily_sync"
         private const val WIDGET_THEME_CHANNEL = "better_phenikaa/widget_theme"
         private const val FLUTTER_PREFS = "FlutterSharedPreferences"
         private const val THEME_KEY = "flutter.appTheme"

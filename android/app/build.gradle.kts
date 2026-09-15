@@ -4,6 +4,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+dependencies {
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
+}
+
 android {
     namespace = "vn.edu.phenikaa.better_phenikaa_schedule"
     compileSdk = 37

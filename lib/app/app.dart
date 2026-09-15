@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:better_phenikaa_schedule/features/daily_sync/daily_sync.dart';
 import 'package:better_phenikaa_schedule/features/qldt_intake/qldt_login.dart';
 import 'package:better_phenikaa_schedule/features/qldt_intake/qldt_models.dart';
 import 'package:better_phenikaa_schedule/theme/app_theme.dart';
@@ -90,6 +91,7 @@ class _AppRootState extends State<_AppRoot> {
         final data = ImportedScheduleData.decode(raw);
         _data = data;
         _selectedDate = _initialDateFor(data);
+        await DailySync.enable();
       }
     } on Object catch (error) {
       _errorMessage = 'Không đọc được dữ liệu cục bộ: $error';
@@ -104,6 +106,7 @@ class _AppRootState extends State<_AppRoot> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKey, data.encode());
     await _publishWidget(data);
+    await DailySync.enable();
   }
 
   Future<void> _publishWidget(ImportedScheduleData data) async {
@@ -178,6 +181,7 @@ class _AppRootState extends State<_AppRoot> {
   }
 
   Future<void> _logout() async {
+    await DailySync.disable();
     await clearQldtSession();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_storageKey);
@@ -331,7 +335,7 @@ class _SplashScreen extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            '2.0 • Lịch học & Lịch thi',
+            '2.1.0 • Lịch học & Lịch thi',
             style: TextStyle(color: palette.textSecondary, fontSize: 15),
           ),
           const SizedBox(height: 120),
